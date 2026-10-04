@@ -8,6 +8,7 @@ import { useState } from "react";
 import PostCard from "@/components/features/discover/post-card";
 import { Avatar } from "@/components/ui/avatar";
 import { BackButton } from "@/components/ui/back-button";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Button } from "@/components/ui/button";
 import { DirectionsButton } from "@/components/ui/directions-button";
 import { EmptyState } from "@/components/ui/states";
@@ -93,7 +94,7 @@ export default function ShopProfileExperience({ profile, authenticated }: ShopPr
   return (
     <main className="shop-profile-page">
       {(interactionError || shareFeedback) && <p aria-live="polite" className="share-feedback" role="status">{interactionError || shareFeedback}</p>}
-      <header className="shop-profile-topbar"><BackButton className="shop-back" label="Go back" /><Link aria-label="ZIDDU home" className="brand-lockup" href="/"><span className="brand-mark">z</span><span className="brand-name">ziddu<span>.</span></span></Link></header>
+      <header className="shop-profile-topbar"><BackButton className="shop-back" label="Go back" /><Link aria-label="ZIDDU home" className="brand-lockup" href="/"><BrandLogo alt="" /></Link></header>
       <section className="shop-profile-header" aria-labelledby="shop-profile-name">
         <div className="shop-profile-identity"><Avatar alt={profile.shop.name} image={profile.shop.image} initials={profile.shop.initials} size="lg" /><div><span className="section-kicker">{BUSINESS_CATEGORY_LABELS[profile.shop.category]}</span><h1 id="shop-profile-name">{profile.shop.name} <BadgeCheck aria-label="Verified shop" className="shop-verified" size={19} /></h1><div className="shop-profile-rating"><Star aria-hidden="true" size={15} fill="currentColor" /> <strong>{profile.shop.rating.toFixed(1)}</strong> <span>({new Intl.NumberFormat("en-IN").format(followerCount)} followers)</span></div><div className="shop-profile-location"><MapPin size={14} /> {profile.shop.area}, {profile.shop.city}</div><div className="shop-profile-status"><span className={`shop-status-dot ${profile.shop.status === "Closed" ? "is-closed" : ""}`} /> <strong>{profile.shop.status}</strong>{profile.shop.businessHours && <span>· {profile.shop.businessHours}</span>}</div></div></div>
         <div className="shop-profile-actions"><Button aria-label="Share shop" className="shop-share-button" onClick={() => { void shareShop(); }} variant="outline"><Share2 size={15} /> Share</Button><Button className={followed ? "shop-following" : ""} onClick={() => { void interact("follow", profile.shop.id); }} variant={followed ? "outline" : "primary"}>{followed ? <><Check size={15} /> Following</> : "Follow"}</Button></div>

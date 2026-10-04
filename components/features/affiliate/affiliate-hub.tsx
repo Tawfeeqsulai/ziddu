@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, BadgeCheck, ChartNoAxesCombined, CircleHelp, Clipboard, Clock3, Copy, CreditCard, Gift, LayoutDashboard, Link2, LoaderCircle, Search, Store, UserRound, UsersRound, Wallet, X } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 type Section = "dashboard" | "referrals" | "earnings" | "withdrawals" | "profile";
 type HubSection = Exclude<Section, "withdrawals" | "referrals">;
@@ -160,7 +161,7 @@ export default function AffiliateHub({ section }: { section: Section }) {
     const breakdown = (payload.breakdown ?? []) as Array<{ type: string; status: string; amount: number; count: number }>;
 
     return <main className="affiliate-page">
-        <header className="affiliate-topbar"><Link className="brand-lockup" href="/"><span className="brand-mark">z</span><span className="brand-name">ziddu<span>.</span></span></Link><div><span className="affiliate-status"><i />{dashboard.affiliate.status}</span><Link href="/profile">ZIDDU profile <ArrowUpRight size={14} /></Link></div></header>
+        <header className="affiliate-topbar"><Link className="brand-lockup" href="/"><BrandLogo /></Link><div><span className="affiliate-status"><i />{dashboard.affiliate.status}</span><Link href="/profile">ZIDDU profile <ArrowUpRight size={14} /></Link></div></header>
         <div className="affiliate-layout">
             <aside className="affiliate-sidebar"><div className="affiliate-sidebar-title"><span className="affiliate-avatar">{dashboard.affiliate.user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span><div><strong>{dashboard.affiliate.user.name}</strong><small>Affiliate · {dashboard.affiliate.code}</small></div></div><span className="affiliate-nav-label">AFFILIATE HUB</span><nav>{hubSections.map((item) => { const Icon = icons[item]; return <Link aria-current={activeSection === item ? "page" : undefined} className={activeSection === item ? "is-active" : ""} href={item === "dashboard" ? "/affiliate" : `/affiliate/${item}`} key={item}><Icon size={17} />{labels[item]}</Link>; })}</nav><BackButton className="affiliate-back-link" label="Go back">Back to ZIDDU</BackButton></aside>
             <section className="affiliate-content">

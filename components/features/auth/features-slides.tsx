@@ -2,6 +2,7 @@
 
 import { Armchair, ArrowLeft, ArrowRight, BadgePercent, CreditCard, Headphones, Heart, MapPin, Navigation, ShoppingBag, Store, Utensils } from "lucide-react";
 import { useRef, useState } from "react";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 const slides = [
     {
@@ -105,7 +106,7 @@ export function FeaturesSlides({ onSkip }: { onSkip?: () => void }) {
         <section aria-label="Why use ZIDDU" className="features-slides">
             <div className="features-slides-orbit orbit-one" />
             <div className="features-slides-orbit orbit-two" />
-            <div className="features-slides-topline"><span className="brand-lockup"><span className="brand-mark">z</span><span className="brand-name">ziddu<span>.</span></span></span><span className="features-slide-count">0{active + 1} / 03</span>{onSkip && <button className="features-slide-skip" onClick={onSkip} type="button">Skip</button>}</div>
+            <div className="features-slides-topline"><span className="brand-lockup"><BrandLogo /></span><span className="features-slide-count">0{active + 1} / 03</span>{onSkip && <button className="features-slide-skip" onClick={onSkip} type="button">Skip</button>}</div>
             <div className="features-slides-content" key={active}>
                 <span className="features-slide-icon"><Icon size={28} strokeWidth={1.8} /></span>
                 <span className="section-kicker">{slide.eyebrow}</span>

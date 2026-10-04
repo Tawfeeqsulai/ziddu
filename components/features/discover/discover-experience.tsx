@@ -26,6 +26,7 @@ import { BUSINESS_CATEGORIES, BUSINESS_CATEGORY_LABELS, type DiscoveryData, type
 import PostCard from "@/components/features/discover/post-card";
 import SessionControl from "@/components/features/auth/session-control";
 import { BottomNavigation } from "@/components/ui/bottom-navigation";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { EmptyState } from "@/components/ui/states";
 import { useRouter } from "next/navigation";
 import { publishFollowChange } from "@/lib/follow-sync";
@@ -155,8 +156,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand-lockup" href="#top" aria-label="ZIDDU home">
-          <span className="brand-mark">z</span>
-          <span className="brand-name">ziddu<span>.</span></span>
+          <BrandLogo alt="" />
         </a>
         <button className="location-control" type="button">
           <span className="location-pin"><MapPin size={16} strokeWidth={2.3} /></span>

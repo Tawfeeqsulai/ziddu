@@ -96,31 +96,18 @@ input:focus-visible {
 .brand-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   width: fit-content;
   color: var(--ink);
   text-decoration: none;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 31px;
-  height: 31px;
-  border-radius: 11px 11px 11px 4px;
-  background: var(--leaf);
-  color: #fffdf7;
-  font: 700 25px/1 var(--font-editorial);
-  transform: rotate(-5deg);
-}
-
-.brand-name {
-  font: 700 25px/1 var(--font-editorial);
-  letter-spacing: .1px;
-}
-
-.brand-name span {
-  color: var(--coral);
+.brand-image {
+  display: block;
+  width: 160px;
+  height: auto;
+  border: 1px solid rgba(255, 255, 255, .78);
+  border-radius: 13px;
+  box-shadow: 0 5px 16px rgba(12, 31, 58, .18);
 }
 
 .location-control {
@@ -2269,6 +2256,10 @@ input:focus-visible {
     padding: 0 24px;
   }
 
+  .brand-image {
+    width: 138px;
+  }
+
   .page-frame {
     grid-template-columns: 160px minmax(430px, 1fr) 260px;
     gap: 23px;
@@ -2347,14 +2338,8 @@ input:focus-visible {
     padding: 0 16px;
   }
 
-  .brand-mark {
-    width: 28px;
-    height: 28px;
-    font-size: 23px;
-  }
-
-  .brand-name {
-    font-size: 23px;
+  .brand-image {
+    width: 118px;
   }
 
   .top-actions {
@@ -2681,16 +2666,6 @@ input:focus-visible {
   }
 }
 
-.brand-mark {
-  background: var(--ziddu-blue);
-  color: white;
-}
-
-.brand-name {
-  color: var(--ziddu-navy);
-}
-
-.brand-name span,
 .location-pin {
   color: var(--ziddu-blue);
 }
@@ -3364,32 +3339,13 @@ input:focus-visible {
 }
 
 .app-splash-brand {
-  display: flex;
-  align-items: center;
-  gap: 13px;
   animation: splash-arrive 600ms cubic-bezier(.2, .8, .2, 1) both;
 }
 
-.app-splash-mark {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  border-radius: 19px 19px 19px 6px;
-  background: var(--ziddu-blue);
-  box-shadow: 0 8px 20px rgba(23, 111, 229, .2);
-  color: white;
-  font: 700 43px/1 var(--font-editorial);
-  transform: rotate(-5deg);
-}
-
-.app-splash-name {
-  color: var(--ziddu-navy);
-  font: 700 43px/1 var(--font-editorial);
-}
-
-.app-splash-name span {
-  color: var(--ziddu-red);
+.app-splash-brand .brand-image {
+  width: min(420px, 88vw);
+  border-radius: 20px;
+  box-shadow: 0 12px 34px rgba(12, 31, 58, .2);
 }
 
 .app-splash-tagline {
