@@ -15,10 +15,9 @@ type VendorFields = {
     state: string;
     pincode: string;
     phone: string;
-    email: string;
 };
 
-export default function AffiliateVendorRegistrationForm({ initial }: { initial: Pick<VendorFields, "address" | "locality" | "city" | "state" | "pincode" | "phone" | "email"> }) {
+export default function AffiliateVendorRegistrationForm({ initial }: { initial: Pick<VendorFields, "address" | "locality" | "city" | "state" | "pincode" | "phone"> }) {
     const router = useRouter();
     const [fields, setFields] = useState<VendorFields>({ name: "", category: "RESTAURANT", description: "", ...initial });
     const [error, setError] = useState("");
@@ -54,7 +53,6 @@ export default function AffiliateVendorRegistrationForm({ initial }: { initial: 
                         <label className="affiliate-form-wide">Business name<input autoComplete="organization" maxLength={100} onChange={(event) => setField("name", event.target.value)} required value={fields.name} /></label>
                         <label>Business category<select onChange={(event) => setField("category", event.target.value as VendorFields["category"])} value={fields.category}><option value="RESTAURANT">Restaurant</option><option value="FURNITURE">Furniture</option><option value="ELECTRONICS">Electronics</option></select></label>
                         <label>Business phone<input autoComplete="tel" inputMode="tel" maxLength={16} onChange={(event) => setField("phone", event.target.value.replace(/[^\d+]/g, ""))} required value={fields.phone} /></label>
-                        <label className="affiliate-form-wide">Business email<input autoComplete="email" maxLength={254} onChange={(event) => setField("email", event.target.value)} type="email" value={fields.email} /></label>
                         <label className="affiliate-form-wide">Description<textarea maxLength={500} onChange={(event) => setField("description", event.target.value)} value={fields.description} /></label>
                     </div>
                 </section>

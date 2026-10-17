@@ -16,7 +16,7 @@ export async function GET() {
     if ("response" in access) return access.response;
     const [dashboard, user] = await Promise.all([
         getAffiliateDashboard(access.user.id),
-        prisma.user.findUnique({ where: { id: access.user.id }, select: { name: true, email: true, phoneNumber: true, image: true, username: true, createdAt: true } }),
+        prisma.user.findUnique({ where: { id: access.user.id }, select: { name: true, phoneNumber: true, image: true, username: true, createdAt: true } }),
     ]);
     return NextResponse.json({ profile: { affiliate: dashboard?.affiliate, user, accounts: dashboard?.payoutAccounts ?? [] } });
 }

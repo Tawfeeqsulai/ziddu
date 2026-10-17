@@ -7,7 +7,7 @@ export default async function AffiliateVendorRegistrationPage() {
     const user = await requireAffiliatePage();
     const identity = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { address: true, locality: true, city: true, state: true, pincode: true, phoneNumber: true, email: true },
+        select: { address: true, locality: true, city: true, state: true, pincode: true, phoneNumber: true },
     });
     if (!identity) redirect("/affiliate");
 
@@ -18,6 +18,5 @@ export default async function AffiliateVendorRegistrationPage() {
         state: identity.state ?? "",
         pincode: identity.pincode ?? "",
         phone: identity.phoneNumber ?? "",
-        email: identity.email,
     }} />;
 }

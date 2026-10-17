@@ -13,14 +13,6 @@ export const auth = betterAuth({
   trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
   rateLimit: { enabled: true },
   database: prismaAdapter(prisma, { provider: "mysql" }),
-  socialProviders: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-    ? {
-      google: {
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      },
-    }
-    : {},
   user: {
     additionalFields: {
       onboardingCompleted: {

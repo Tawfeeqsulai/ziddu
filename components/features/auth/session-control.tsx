@@ -45,7 +45,7 @@ export default function SessionControl() {
   return <div className="account-menu" ref={menuRef}>
     <button aria-expanded={open} aria-haspopup="menu" aria-label="Open account menu" className="avatar-button signed-in-avatar" onClick={() => setOpen((current) => !current)} type="button">{initials}</button>
     {open && <div aria-label="Account menu" className="account-menu-panel" role="menu">
-      <div className="account-menu-heading"><strong>{data.user.name}</strong><span>{data.user.email}</span></div>
+      <div className="account-menu-heading"><strong>{data.user.name}</strong><span>Phone sign-in</span></div>
       <Link href="/profile" onClick={() => setOpen(false)} role="menuitem"><UserRound size={15} /> View profile</Link>
       <Link href="/affiliate" onClick={() => setOpen(false)} role="menuitem"><Gift size={15} /> Affiliate program</Link>
       <button onClick={() => { void signOut(); }} role="menuitem" type="button"><LogOut size={15} /> Log out</button>

@@ -26,7 +26,6 @@ model SharedVendor {
   userId           Int       @map("user_id")
   businessName     String?   @map("business_name") @db.VarChar(255)
   status           String    @db.VarChar(20)
-  email            String?   @db.VarChar(255)
   logoUrl          String?   @map("logo_url") @db.Text
   businessCategory String?   @map("business_category") @db.VarChar(255)
   address          String?   @db.Text

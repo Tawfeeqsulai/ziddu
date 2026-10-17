@@ -6,5 +6,5 @@ export default async function LoginPage() {
   const user = await getCurrentUser();
   if (user) redirect("/");
 
-  return <LoginExperience developmentOtp="123456" googleEnabled={Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)} />;
+  return <LoginExperience developmentOtp="123456" />;
 }

@@ -34,7 +34,6 @@ export type AffiliateVendorInput = {
     state: string;
     pincode: string;
     phone: string;
-    email: string;
 };
 
 function newAffiliateCode() {
@@ -111,7 +110,6 @@ export async function createAffiliateVendorAccount(userId: string, input: Affili
                         ? "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=85"
                         : "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=85",
                 description: input.description || null,
-                email: input.email || null,
                 phone: input.phone,
                 ownerId: userId,
                 locationId: location.id,
@@ -205,7 +203,7 @@ export async function createVendorDineInCommission(tx: Prisma.TransactionClient,
 }
 
 export async function getAffiliateDashboard(userId: string) {
-    const affiliate = await prisma.affiliate.findUnique({ where: { userId }, include: { user: { select: { name: true, email: true, image: true, phoneNumber: true, createdAt: true } } } });
+    const affiliate = await prisma.affiliate.findUnique({ where: { userId }, include: { user: { select: { name: true, image: true, phoneNumber: true, createdAt: true } } } });
     if (!affiliate) return null;
 
     const [clickCount, customerCount, vendorCount, commissions, withdrawals, recentReferrals] = await Promise.all([

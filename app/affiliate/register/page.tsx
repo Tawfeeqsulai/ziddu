@@ -10,7 +10,7 @@ export default async function AffiliateRegistrationPage() {
     if (!sessionUser.onboardingCompleted) redirect("/onboarding");
 
     const [user, affiliate] = await Promise.all([
-        prisma.user.findUnique({ where: { id: sessionUser.id }, select: { name: true, email: true, phoneNumber: true, address: true, city: true, state: true, pincode: true } }),
+        prisma.user.findUnique({ where: { id: sessionUser.id }, select: { name: true, phoneNumber: true, address: true, city: true, state: true, pincode: true } }),
         prisma.affiliate.findUnique({ where: { userId: sessionUser.id }, select: { status: true } }),
     ]);
     if (!user) redirect("/login");

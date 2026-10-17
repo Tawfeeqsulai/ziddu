@@ -4,14 +4,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth/client";
 import { BrandLogo } from "@/components/ui/brand-logo";
 
 type LoginStep = "phone" | "otp";
 
 type PhoneLoginFormProps = {
   developmentOtp?: string;
-  googleEnabled: boolean;
 };
 
 function normalizePhoneInput(value: string): string | null {
@@ -21,16 +19,16 @@ function normalizePhoneInput(value: string): string | null {
   return `+91${digits}`;
 }
 
-export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneLoginFormProps) {
+export default function PhoneLoginForm({ developmentOtp }: PhoneLoginFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<LoginStep>("phone");
+  const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [normalizedPhone, setNormalizedPhone] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const phoneRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
@@ -78,6 +76,11 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
   async function submitPhone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const phone = normalizePhoneInput(phoneInput);
+    const name = nameInput.trim();
+    if (name.length < 2) {
+      setError("Enter your name to continue.");
+      return;
+    }
     if (!phone) {
       setError("Enter a valid 10-digit Indian mobile number.");
       return;
@@ -102,7 +105,7 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
       const response = await fetch("/api/auth/phone-number/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone, code }),
+        body: JSON.stringify({ phoneNumber: normalizedPhone, code, name: nameInput.trim() }),
       });
       if (!response.ok) {
         setError(response.status === 429
@@ -126,21 +129,6 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
     await sendCode(normalizedPhone);
   }
 
-  async function signInWithGoogle() {
-    setError("");
-    if (!googleEnabled) {
-      setError("Google sign-in is not configured yet.");
-      return;
-    }
-    setGoogleLoading(true);
-    try {
-      await authClient.signIn.social({ provider: "google", callbackURL: "/" });
-    } catch {
-      setError("Google sign-in could not be started. Please try again.");
-      setGoogleLoading(false);
-    }
-  }
-
   return (
     <>
       <section className="login-content" aria-labelledby="login-title">
@@ -149,6 +137,15 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
 
         {step === "phone" ? (
           <form className="login-form" onSubmit={submitPhone}>
+            <label className="login-field-label" htmlFor="login-name">Your name</label>
+            <input
+              autoComplete="name"
+              id="login-name"
+              onChange={(event) => { setNameInput(event.target.value); setError(""); }}
+              placeholder="Enter your name"
+              required
+              value={nameInput}
+            />
             <div className="phone-input-wrap">
               <span className="country-prefix">+91 <i /></span>
               <input
@@ -167,10 +164,6 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
             {error && <p className="login-error" role="alert">{error}</p>}
             <button className="login-primary-button" disabled={isLoading} type="submit">
               {isLoading ? "Sending code…" : "Send OTP"}<ArrowRight size={17} />
-            </button>
-            <div className="login-divider"><span />or<span /></div>
-            <button className="google-login-button" disabled={googleLoading} onClick={signInWithGoogle} type="button">
-              <span className="google-g" aria-hidden="true">G</span>{googleLoading ? "Opening Google…" : "Continue with Google"}
             </button>
           </form>
         ) : (

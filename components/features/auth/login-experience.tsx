@@ -6,16 +6,15 @@ import PhoneLoginForm from "@/components/features/auth/phone-login-form";
 
 type LoginExperienceProps = {
     developmentOtp?: string;
-    googleEnabled: boolean;
 };
 
-export default function LoginExperience({ developmentOtp, googleEnabled }: LoginExperienceProps) {
+export default function LoginExperience({ developmentOtp }: LoginExperienceProps) {
     const [showMobileFeatures, setShowMobileFeatures] = useState(true);
 
     return (
         <main className={`login-page${showMobileFeatures ? " mobile-features-active" : ""}`}>
             <section className="login-form-panel">
-                <PhoneLoginForm developmentOtp={developmentOtp} googleEnabled={googleEnabled} />
+                <PhoneLoginForm developmentOtp={developmentOtp} />
             </section>
             <FeaturesSlides onSkip={() => setShowMobileFeatures(false)} />
         </main>

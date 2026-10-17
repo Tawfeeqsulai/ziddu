@@ -1,5 +1,7 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { auth } from "@/lib/auth";
+import { normalizeIndianPhone } from "@/lib/auth/phone";
+import { prisma } from "@/lib/db/prisma";
 
 const handlers = toNextJsHandler(auth);
 
@@ -25,5 +27,21 @@ export function GET(request: Request) {
 }
 
 export function POST(request: Request) {
-	return safeAuthHandler(handlers.POST, request);
+  return handlePost(request);
+}
+
+async function handlePost(request: Request) {
+  const isPhoneVerification = new URL(request.url).pathname.endsWith("/phone-number/verify");
+  const body = isPhoneVerification
+    ? await request.clone().json().catch(() => null) as { phoneNumber?: unknown; name?: unknown } | null
+    : null;
+  const phoneNumber = typeof body?.phoneNumber === "string" ? normalizeIndianPhone(body.phoneNumber) : null;
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const response = await safeAuthHandler(handlers.POST, request);
+
+  if (isPhoneVerification && response.ok && phoneNumber && name.length >= 2) {
+    await prisma.user.updateMany({ where: { phoneNumber }, data: { name } });
+  }
+
+  return response;
 }

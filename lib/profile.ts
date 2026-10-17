@@ -7,7 +7,6 @@ const reservedUsernames = new Set(["admin", "administrator", "support", "ziddu",
 
 export const profileInputSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters.").max(80, "Name is too long."),
-  email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254, "Email address is too long.").optional().or(z.literal("")),
   phoneNumber: z.string().trim().regex(/^(?:\+91|91)?[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number.").optional().or(z.literal("")),
   username: z.string().trim().toLowerCase().max(24, "Username is too long.").optional().or(z.literal("")),
   image: z.string().trim().url("Enter a valid image URL.").max(500, "Image URL is too long.").optional().or(z.literal("")),

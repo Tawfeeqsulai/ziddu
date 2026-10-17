@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, BadgePercent, Landmark, MapPin, UserRound } from "lucide-react";
 
-type RegistrationIdentity = { name: string; email: string; phoneNumber: string | null; address: string | null; city: string | null; state: string | null; pincode: string | null };
+type RegistrationIdentity = { name: string; phoneNumber: string | null; address: string | null; city: string | null; state: string | null; pincode: string | null };
 type RegistrationFields = { address: string; city: string; state: string; pincode: string; accountHolderName: string; bankName: string; branchName: string; accountNumber: string; confirmAccountNumber: string; ifscCode: string; upiId: string; termsAccepted: boolean };
 
 export default function AffiliateRegistrationForm({ identity, commissionRate }: { identity: RegistrationIdentity; commissionRate: number }) {
@@ -60,7 +60,6 @@ export default function AffiliateRegistrationForm({ identity, commissionRate }: 
                     <h3><UserRound size={17} /> Personal information</h3>
                     <div className="affiliate-form-grid">
                         <label className="affiliate-form-wide">Full name<input autoComplete="name" readOnly value={identity.name} /></label>
-                        <label>Email address<input autoComplete="email" readOnly value={identity.email} /></label>
                         <label>Phone number<input autoComplete="tel" readOnly value={identity.phoneNumber ?? "Not added to your ZIDDU account"} /></label>
                     </div>
                     <p className="affiliate-form-note">Your existing ZIDDU account is used for sign-in and identity. To change these details, edit your ZIDDU profile.</p>

@@ -13,7 +13,6 @@ const vendorSchema = z.object({
     state: z.string().trim().min(2).max(100),
     pincode: z.string().trim().regex(/^[1-9]\d{5}$/),
     phone: z.string().trim().regex(/^\+?[1-9]\d{7,14}$/),
-    email: z.union([z.string().trim().email().max(254), z.literal("")]),
 });
 
 export async function POST(request: Request) {
