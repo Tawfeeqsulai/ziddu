@@ -8,11 +8,25 @@ export type AIProductResult = {
   shop: Shop;
   price: number;
   description: string;
+  originalPrice?: number;
+  badge?: string;
+};
+
+export type AIActiveOffer = {
+  id: string;
+  title: string;
+  description: string;
+  validUntil: string;
+  shop: Shop;
+  price?: number;
+  originalPrice?: number;
+  badge?: string;
 };
 
 export type AIResult =
   | { type: "shop"; shop: Shop }
   | { type: "product"; product: AIProductResult }
+  | { type: "active-offer"; offer: AIActiveOffer }
   | { type: "offer"; post: FeedPost; shop: Shop }
   | { type: "post"; post: FeedPost; shop: Shop }
   | { type: "location"; label: string; detail: string };

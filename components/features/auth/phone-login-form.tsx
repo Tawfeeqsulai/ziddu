@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 type LoginStep = "phone" | "otp";
 
@@ -35,8 +36,8 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (step === "phone") phoneRef.current?.focus();
-    else codeRef.current?.focus();
+    if (step === "phone" && !window.matchMedia("(pointer: coarse)").matches) phoneRef.current?.focus();
+    else if (step === "otp") codeRef.current?.focus();
   }, [step]);
 
   useEffect(() => {
@@ -143,7 +144,7 @@ export default function PhoneLoginForm({ developmentOtp, googleEnabled }: PhoneL
   return (
     <>
       <section className="login-content" aria-labelledby="login-title">
-        <h1 id="login-title">Welcome to<br /><em>ZIDDU</em></h1>
+        <h1 id="login-title"><span>Welcome to</span><BrandLogo className="login-brand-image" /></h1>
         <p className="login-subtitle">{step === "phone" ? "Login to continue" : `Login to continue · ${normalizedPhone}`}{developmentOtp && step === "otp" && <small className="login-dev-otp">Simulated code: {developmentOtp}</small>}</p>
 
         {step === "phone" ? (

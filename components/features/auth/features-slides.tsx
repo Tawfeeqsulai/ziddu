@@ -1,8 +1,10 @@
 "use client";
 
-import { Armchair, ArrowLeft, ArrowRight, BadgePercent, CreditCard, Headphones, Heart, MapPin, Navigation, ShoppingBag, Store, Utensils } from "lucide-react";
+import { Armchair, ArrowLeft, ArrowRight, BadgePercent, Check, CreditCard, Headphones, Heart, LoaderCircle, MapPin, Navigation, ShoppingBag, Store, Utensils } from "lucide-react";
 import { useRef, useState } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
+import { getCurrentLocation } from "@/lib/current-location";
+import { saveOnboardingLocation } from "@/lib/onboarding-location";
 
 const slides = [
     {
@@ -37,7 +39,7 @@ const demoPhotos = [
     "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=420&q=80",
 ];
 
-function MobileArtwork({ active }: { active: number }) {
+function MobileArtwork({ active, locationBusy, locationError, locationMessage, onRequestLocation }: { active: number; locationBusy: boolean; locationError: string; locationMessage: string; onRequestLocation: () => void }) {
     if (active === 1) {
         return (
             <div className="features-mobile-artwork features-collage" aria-hidden="true">
@@ -58,6 +60,12 @@ function MobileArtwork({ active }: { active: number }) {
                 <div><span><Navigation size={19} /></span><p>Navigate easily</p></div>
                 <div><span><CreditCard size={19} /></span><p>Pay with UPI</p></div>
                 <div><span><Heart size={19} /></span><p>Support local businesses</p></div>
+                <button aria-label="Use my current location" className="features-location-button" disabled={locationBusy} onClick={onRequestLocation} type="button">
+                    {locationBusy ? <LoaderCircle className="features-location-spinner" size={17} /> : locationMessage ? <Check size={17} /> : <MapPin size={17} />}
+                    {locationBusy ? "Finding your location..." : locationMessage ? "Location ready" : "Use my current location"}
+                </button>
+                {locationError && <span aria-live="polite" className="features-location-error" role="alert">{locationError}</span>}
+                {locationMessage && <span aria-live="polite" className="features-location-message">{locationMessage}</span>}
             </div>
         );
     }
@@ -81,6 +89,9 @@ function MobileArtwork({ active }: { active: number }) {
 
 export function FeaturesSlides({ onSkip }: { onSkip?: () => void }) {
     const [active, setActive] = useState(0);
+    const [locationBusy, setLocationBusy] = useState(false);
+    const [locationMessage, setLocationMessage] = useState("");
+    const [locationError, setLocationError] = useState("");
     const touchStartX = useRef<number | null>(null);
     const slide = slides[active];
     const Icon = slide.icon;
@@ -102,6 +113,22 @@ export function FeaturesSlides({ onSkip }: { onSkip?: () => void }) {
         if (distance > 45 && active > 0) setActive((current) => current - 1);
     }
 
+    async function requestCurrentLocation() {
+        setLocationBusy(true);
+        setLocationError("");
+        setLocationMessage("");
+        try {
+            const location = await getCurrentLocation();
+            saveOnboardingLocation(location);
+            const area = [location.locality, location.city].filter(Boolean).join(", ");
+            setLocationMessage(area ? `${area} added for onboarding.` : "Location added for onboarding.");
+        } catch (cause) {
+            setLocationError(cause instanceof Error ? cause.message : "We couldn't find your location. Enter your area during onboarding.");
+        } finally {
+            setLocationBusy(false);
+        }
+    }
+
     return (
         <section aria-label="Why use ZIDDU" className="features-slides">
             <div className="features-slides-orbit orbit-one" />
@@ -113,6 +140,14 @@ export function FeaturesSlides({ onSkip }: { onSkip?: () => void }) {
                 <h2>{slide.title}</h2>
                 <p>{slide.description}</p>
                 <div className="features-slide-points"><span><BadgePercent size={15} /> Local offers</span><span><MapPin size={15} /> Nearby finds</span><span><Heart size={15} /> Support local</span></div>
+                {active === 2 && <div className="features-location-action">
+                    <button className="features-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button">
+                        {locationBusy ? <LoaderCircle className="features-location-spinner" size={17} /> : locationMessage ? <Check size={17} /> : <MapPin size={17} />}
+                        {locationBusy ? "Finding your location..." : locationMessage ? "Location ready" : "Use my current location"}
+                    </button>
+                    {locationError && <span aria-live="polite" className="features-location-error" role="alert">{locationError}</span>}
+                    {locationMessage && <span aria-live="polite" className="features-location-message">{locationMessage}</span>}
+                </div>}
                 <span className="features-slide-note">{slide.note}</span>
             </div>
             <div className="features-slides-controls"><button aria-label="Previous feature" onClick={() => move(-1)} type="button"><ArrowLeft size={17} /></button><div aria-label={`Slide ${active + 1} of ${slides.length}`} className="features-slide-dots">{slides.map((item, index) => <button aria-label={`Show slide ${index + 1}`} aria-selected={active === index} className={active === index ? "is-active" : ""} key={item.eyebrow} onClick={() => setActive(index)} role="tab" type="button" />)}</div><button aria-label="Next feature" onClick={() => move(1)} type="button"><ArrowRight size={17} /></button></div>
@@ -125,7 +160,7 @@ export function FeaturesSlides({ onSkip }: { onSkip?: () => void }) {
                     <h2>{slide.mobileTitle}</h2>
                     <p>{slide.description}</p>
                 </div>
-                <MobileArtwork active={active} />
+                <MobileArtwork active={active} locationBusy={locationBusy} locationError={locationError} locationMessage={locationMessage} onRequestLocation={() => { void requestCurrentLocation(); }} />
                 <footer className="features-mobile-footer">
                     <div aria-label={`Slide ${active + 1} of ${slides.length}`} className="features-mobile-dots" role="tablist">
                         {slides.map((item, index) => <button aria-label={`Show slide ${index + 1}`} aria-selected={active === index} className={active === index ? "is-active" : ""} key={item.eyebrow} onClick={() => setActive(index)} role="tab" type="button" />)}

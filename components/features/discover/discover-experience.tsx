@@ -16,6 +16,7 @@ import {
   Home,
   MapPin,
   Plus,
+  QrCode,
   ShoppingBag,
   Sparkles,
   Store,
@@ -30,6 +31,7 @@ import { BrandLogo } from "@/components/ui/brand-logo";
 import { EmptyState } from "@/components/ui/states";
 import { useRouter } from "next/navigation";
 import { publishFollowChange } from "@/lib/follow-sync";
+import { UpiQrScanner } from "@/components/features/payment/upi-qr-scanner";
 
 type DiscoverExperienceProps = {
   data: DiscoveryData;
@@ -65,6 +67,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [showAllShops, setShowAllShops] = useState(false);
   const [interactionError, setInteractionError] = useState("");
+  const [showUpiScanner, setShowUpiScanner] = useState(false);
 
   useEffect(() => {
     const apply = (change: { shopId: string; active: boolean }) => {
@@ -170,6 +173,9 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
           <Link className="desktop-nav-ai" href="/ai"><Sparkles size={13} /> AI</Link>
         </nav>
         <div className="top-actions">
+          <button aria-label="Scan UPI payment QR" className="icon-button upi-scan-trigger" onClick={() => setShowUpiScanner(true)} title="Scan UPI payment QR" type="button">
+            <QrCode size={19} />
+          </button>
           <Link aria-label="Order history" className="icon-button cart-button" href="/orders">
             <ShoppingBag size={19} />
             {Object.values(cart).reduce((total, count) => total + count, 0) > 0 && <span className="cart-count">{Object.values(cart).reduce((total, count) => total + count, 0)}</span>}
@@ -322,7 +328,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
           </>}
         </section>
       </div>}
-
+      {showUpiScanner && <UpiQrScanner onClose={() => setShowUpiScanner(false)} />}
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, Check, MapPin, Smartphone, UserRound } from "luc
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { interestOptions, profileInputSchema, type ProfileInput } from "@/lib/profile";
+import { getCurrentLocation } from "@/lib/current-location";
+import { clearOnboardingLocation, readOnboardingLocation, saveOnboardingLocation } from "@/lib/onboarding-location";
 
 const interestLabels: Record<ProfileInput["interests"][number], string> = {
   RESTAURANT: "Restaurants",
@@ -24,6 +26,7 @@ export default function ProfileForm({ mode, initial, emailEditable = false }: Pr
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
   const [verificationPhone, setVerificationPhone] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [verificationLoading, setVerificationLoading] = useState(false);
@@ -60,6 +63,21 @@ export default function ProfileForm({ mode, initial, emailEditable = false }: Pr
       }
     }
     if (step === 2 && form.interests.length === 0) return setError("Choose at least one interest.");
+    if (step === 2 && mode === "onboarding") {
+      try {
+        const location = readOnboardingLocation();
+        if (location) {
+          setForm((current) => ({
+            ...current,
+            city: current.city || location.city || "",
+            locality: current.locality || location.locality || "",
+          }));
+          setLocationMessage([location.locality, location.city].filter(Boolean).join(", "));
+        }
+      } catch {
+        setError("We couldn't load your earlier location. You can find it again on the location step.");
+      }
+    }
     if (step < 3) setStep((current) => (current + 1) as Step);
   }
 
@@ -83,21 +101,22 @@ export default function ProfileForm({ mode, initial, emailEditable = false }: Pr
   }
 
   async function requestCurrentLocation() {
-    if (!navigator.geolocation) return setError("Location is not available in this browser.");
     setLocationBusy(true);
     setError("");
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      try {
-        const response = await fetch("/api/location/reverse-geocode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude }) });
-        const result = await response.json() as { location?: { city?: string; locality?: string; address?: string; state?: string; pincode?: string; latitude?: number; longitude?: number }; message?: string };
-        if (!response.ok || !result.location) throw new Error(result.message);
-        const location = result.location;
-        setForm((current) => ({ ...current, city: location.city ?? current.city, locality: location.locality ?? current.locality }));
-        const saveResponse = await fetch("/api/location/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(location) });
-        if (!saveResponse.ok) throw new Error("Could not save location");
-      } catch { setError("We could not determine your location. Search for your area instead."); }
-      finally { setLocationBusy(false); }
-    }, () => { setError("Location permission was denied. Search for your area instead."); setLocationBusy(false); });
+    setLocationMessage("");
+    try {
+      const location = await getCurrentLocation();
+      setForm((current) => ({ ...current, city: location.city ?? current.city, locality: location.locality ?? current.locality }));
+      if (mode === "onboarding") saveOnboardingLocation(location);
+      const saveResponse = await fetch("/api/location/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(location) });
+      const result = await saveResponse.json() as { message?: string };
+      if (!saveResponse.ok) throw new Error(result.message ?? "We couldn't save your location. Please try again.");
+      setLocationMessage([location.locality, location.city].filter(Boolean).join(", "));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't determine your location. Enter your area manually.");
+    } finally {
+      setLocationBusy(false);
+    }
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -106,13 +125,25 @@ export default function ProfileForm({ mode, initial, emailEditable = false }: Pr
     if (!form.city || !form.locality.trim()) return setError("Add your city and locality to continue.");
     setSaving(true);
     try {
+      if (mode === "onboarding") {
+        const location = readOnboardingLocation();
+        const matchesDetectedArea = location
+          && form.city.trim().toLowerCase() === location.city?.trim().toLowerCase()
+          && form.locality.trim().toLowerCase() === location.locality?.trim().toLowerCase();
+        if (matchesDetectedArea && location) {
+          const locationResponse = await fetch("/api/location/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(location) });
+          const locationResult = await locationResponse.json() as { message?: string };
+          if (!locationResponse.ok) return setError(locationResult.message ?? "We couldn't save your location. Please try again.");
+        }
+      }
       const response = await fetch("/api/profile", { method: mode === "onboarding" ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const result = await response.json() as { message?: string };
       if (!response.ok) return setError(result.message ?? "We could not save your profile.");
+      if (mode === "onboarding") clearOnboardingLocation();
       router.replace(mode === "onboarding" ? "/" : "/profile");
       router.refresh();
-    } catch {
-      setError("Connection issue. Please try again.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Connection issue. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -123,8 +154,8 @@ export default function ProfileForm({ mode, initial, emailEditable = false }: Pr
       <div className="profile-flow-top"><span className="section-kicker">{mode === "onboarding" ? `STEP ${step} OF 3` : "YOUR PROFILE"}</span><div className="profile-progress" aria-label={`${step} of 3 steps`}>{[1, 2, 3].map((item) => <span className={item <= step ? "is-current" : ""} key={item} />)}</div></div>
       {mode === "onboarding" && step === 1 && <section className="profile-step"><UserRound className="profile-step-icon" size={24} /><h1>Make it yours.</h1><p>Tell your neighborhood who they&apos;re meeting.</p><label>Name<input autoFocus value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder="Your name" /></label><label><span>Mobile number {phoneNumberLocked && <small>verified</small>}</span><div className="phone-input-wrap"><input autoComplete="tel-national" disabled={phoneNumberLocked} inputMode="numeric" maxLength={14} onChange={(event) => { setField("phoneNumber", event.target.value.replace(/[^\d+]/g, "")); setError(""); }} placeholder="10-digit mobile number" required value={form.phoneNumber ?? ""} /><Smartphone aria-hidden="true" size={17} /></div></label><label>Email address<input autoComplete="email" disabled={!emailEditable} onChange={(event) => { setField("email", event.target.value); setError(""); }} placeholder="you@example.com" required={emailEditable} type="email" value={form.email ?? ""} /></label><label>Username <small>optional</small><input value={form.username ?? ""} onChange={(event) => setField("username", event.target.value)} placeholder="yourhandle" /></label>{verificationPhone && <div className="profile-phone-verification"><p>Enter your 6-digit code</p><small>Simulated code: 123456</small><input autoComplete="one-time-code" inputMode="numeric" maxLength={6} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••••" value={verificationCode} /><button className="confirm-button" disabled={verificationLoading} onClick={() => { void verifyPhone(); }} type="button">{verificationLoading ? "Verifying..." : "Verify mobile number"}</button></div>}</section>}
       {mode === "onboarding" && step === 2 && <section className="profile-step"><span className="profile-step-icon profile-emoji">✦</span><h1>What are you into?</h1><p>Pick one or more so we can tune your local finds.</p><div className="interest-grid">{interestOptions.map((interest) => <button className={form.interests.includes(interest) ? "interest-option selected" : "interest-option"} key={interest} onClick={() => toggleInterest(interest)} type="button"><span>{form.interests.includes(interest) ? <Check size={16} /> : ""}</span>{interestLabels[interest]}</button>)}</div></section>}
-      {mode === "onboarding" && step === 3 && <section className="profile-step"><MapPin className="profile-step-icon" size={24} /><h1>Stay local.</h1><p>Choose a place for better nearby discovery. You can change it anytime.</p><label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{cities.map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input autoFocus value={form.locality} onChange={(event) => setField("locality", event.target.value)} placeholder="For example, Anna Nagar" /></label></section>}
-      {mode === "edit" && <section className="profile-step"><h1>Edit your profile.</h1><p>Keep your ZIDDU identity current.</p><label>Name<input autoFocus value={form.name} onChange={(event) => setField("name", event.target.value)} /></label><label>Username <small>optional</small><input value={form.username ?? ""} onChange={(event) => setField("username", event.target.value)} /></label><label>Bio <small>optional</small><textarea value={form.bio ?? ""} onChange={(event) => setField("bio", event.target.value)} maxLength={160} placeholder="A little about you" /></label><div className="interest-grid">{interestOptions.map((interest) => <button className={form.interests.includes(interest) ? "interest-option selected" : "interest-option"} key={interest} onClick={() => toggleInterest(interest)} type="button"><span>{form.interests.includes(interest) ? <Check size={16} /> : ""}</span>{interestLabels[interest]}</button>)}</div><label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{cities.map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input value={form.locality} onChange={(event) => setField("locality", event.target.value)} /></label><button className="profile-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button"><MapPin size={15} />{locationBusy ? "Finding your location..." : "Use my current location"}</button></section>}
+      {mode === "onboarding" && step === 3 && <section className="profile-step"><MapPin className="profile-step-icon" size={24} /><h1>Stay local.</h1><p>Choose a place for better nearby discovery. You can change it anytime.</p><label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{[...new Set([...cities, ...(form.city && !cities.includes(form.city) ? [form.city] : [])])].map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input autoFocus value={form.locality} onChange={(event) => setField("locality", event.target.value)} placeholder="For example, Anna Nagar" /></label><button className="profile-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button"><MapPin size={15} />{locationBusy ? "Finding your location..." : locationMessage ? "Update my current location" : "Use my current location"}</button>{locationMessage && <p aria-live="polite" className="profile-location-success">{locationMessage} is ready to use.</p>}</section>}
+      {mode === "edit" && <section className="profile-step"><h1>Edit your profile.</h1><p>Keep your ZIDDU identity current.</p><label>Name<input autoFocus value={form.name} onChange={(event) => setField("name", event.target.value)} /></label><label>Username <small>optional</small><input value={form.username ?? ""} onChange={(event) => setField("username", event.target.value)} /></label><label>Bio <small>optional</small><textarea value={form.bio ?? ""} onChange={(event) => setField("bio", event.target.value)} maxLength={160} placeholder="A little about you" /></label><div className="interest-grid">{interestOptions.map((interest) => <button className={form.interests.includes(interest) ? "interest-option selected" : "interest-option"} key={interest} onClick={() => toggleInterest(interest)} type="button"><span>{form.interests.includes(interest) ? <Check size={16} /> : ""}</span>{interestLabels[interest]}</button>)}</div><label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{[...new Set([...cities, ...(form.city && !cities.includes(form.city) ? [form.city] : [])])].map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input value={form.locality} onChange={(event) => setField("locality", event.target.value)} /></label><button className="profile-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button"><MapPin size={15} />{locationBusy ? "Finding your location..." : locationMessage ? "Update my current location" : "Use my current location"}</button>{locationMessage && <p aria-live="polite" className="profile-location-success">{locationMessage} is ready to use.</p>}</section>}
       {error && <p className="profile-error" role="alert">{error}</p>}
       <div className="profile-flow-actions">{mode === "onboarding" && step > 1 && <button className="profile-back" onClick={() => setStep((current) => (current - 1) as Step)} type="button"><ArrowLeft size={16} /> Back</button>}{mode === "edit" && <button className="profile-back" onClick={() => router.push("/profile")} type="button"><ArrowLeft size={16} /> Cancel</button>}      {mode === "onboarding" && step < 3 ? <button className="confirm-button" disabled={verificationLoading || Boolean(verificationPhone)} onClick={() => { void nextStep(); }} type="button">{verificationLoading ? "Sending code..." : "Continue"} <ArrowRight size={16} /></button> : <button className="confirm-button" disabled={saving} type="submit">{saving ? "Saving..." : mode === "onboarding" ? "Finish setup" : "Save profile"} <Check size={16} /></button>}</div>
     </form>

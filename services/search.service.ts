@@ -20,7 +20,7 @@ function categoryValue(value: string | undefined): BusinessCategory | "ALL" {
 }
 
 function textFilter(value: string) {
-  return value ? { contains: value, mode: "insensitive" as const } : undefined;
+  return value ? { contains: value } : undefined;
 }
 
 function shopView(shop: { id: string; name: string; handle: string; category: BusinessCategory; status: string; rating: number; initials: string; image: string; phone: string | null; description: string | null; follows?: Array<{ id: string }> | false; location: { address: string; locality: string; city: string; state: string; pincode: string | null; latitude: number | null; longitude: number | null } }): Shop {

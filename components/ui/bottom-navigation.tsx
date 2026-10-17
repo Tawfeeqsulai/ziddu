@@ -9,6 +9,7 @@ type MainTab = "Home" | "Search" | "Reels" | "Saved";
 
 const lastTabStorageKey = "ziddu:last-bottom-tab";
 const tabRoutes: Record<MainTab, string> = { Home: "/", Search: "/search", Reels: "/reels", Saved: "/saved" };
+const bottomNavigationRoutes = new Set(["/", "/search", "/saved", "/ai"]);
 
 const defaultItems: NavigationItem[] = [
   { label: "Home", icon: Home },
@@ -41,14 +42,30 @@ export function BottomNavigation({ items = defaultItems, global = false }: { ite
   const aiItem = { label: "ZIDDU AI", icon: Sparkles, active: global && pathname.startsWith("/ai"), onClick: () => router.push("/ai") };
   const otherItems = navigationItemsSource.filter((item) => item.label !== "ZIDDU AI" && item.label !== "Offers" && item.label !== "Profile");
   const navigationItems = [...otherItems.slice(0, 2), aiItem, ...otherItems.slice(2)];
-  return <nav aria-label="Primary navigation" className="ui-bottom-navigation">{navigationItems.map(({ label, icon: Icon, active, onClick }) => <button aria-current={active ? "page" : undefined} className={active ? "is-active" : ""} key={label} onClick={onClick} type="button"><Icon aria-hidden="true" size={20} /><span>{label}</span></button>)}</nav>;
+  return <nav aria-label="Primary navigation" className="ui-bottom-navigation">
+    <svg aria-hidden="true" className="ui-bottom-navigation-surface" preserveAspectRatio="none" viewBox="0 0 400 112">
+      <defs>
+        <linearGradient id="navigation-outline" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#36c8ed" />
+          <stop offset="55%" stopColor="#287ff0" />
+          <stop offset="100%" stopColor="#884df2" />
+        </linearGradient>
+        <linearGradient id="navigation-fill" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity=".99" />
+          <stop offset="100%" stopColor="#f7fbff" stopOpacity=".99" />
+        </linearGradient>
+      </defs>
+      <path d="M0 38 Q0 18 24 18 H132 C164 18 166 0 200 0 C234 0 236 18 268 18 H376 Q400 18 400 42 V112 H0 Z" fill="url(#navigation-fill)" stroke="url(#navigation-outline)" strokeWidth="1.5" />
+    </svg>
+    {navigationItems.map(({ label, icon: Icon, active, onClick }) => <button aria-current={active ? "page" : undefined} className={[active ? "is-active" : "", label === "ZIDDU AI" ? "is-ai" : ""].filter(Boolean).join(" ")} key={label} onClick={onClick} type="button"><span className="ui-bottom-navigation-icon"><Icon aria-hidden="true" size={label === "ZIDDU AI" ? 34 : 25} /></span><span>{label === "ZIDDU AI" ? "Ziddu AI" : label}</span></button>)}
+  </nav>;
 }
 
 export function AppNavigation({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const restoredInitialTab = useRef(false);
-  const hideNavigation = pathname === "/login" || pathname === "/onboarding";
+  const showNavigation = bottomNavigationRoutes.has(pathname);
 
   useEffect(() => {
     if (restoredInitialTab.current) return;
@@ -63,10 +80,10 @@ export function AppNavigation({ children }: { children: ReactNode }) {
 
   return (
     <AppNavigationContext.Provider value>
-      <div className={`app-navigation-content${hideNavigation ? "" : " has-bottom-navigation"}`}>
+      <div className={`app-navigation-content${showNavigation ? " has-bottom-navigation" : ""}`}>
         {children}
       </div>
-      {!hideNavigation && <BottomNavigation global />}
+      {showNavigation && <BottomNavigation global />}
     </AppNavigationContext.Provider>
   );
 }

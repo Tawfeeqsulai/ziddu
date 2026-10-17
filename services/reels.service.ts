@@ -48,7 +48,7 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
         { isOfferIncluded: true, offer: { is: { validityFrom: { lte: now }, validityTo: { gte: now } } } },
       ],
     };
-    const localWhere = user?.city ? { ...baseWhere, shop: { location: { city: { contains: user.city, mode: "insensitive" as const } } } } : baseWhere;
+    const localWhere = user?.city ? { ...baseWhere, shop: { location: { city: { contains: user.city } } } } : baseWhere;
     const include = {
       shop: { include: { location: true, follows: { where: { userId }, select: { id: true } } } },
       offer: { include: { product: { select: { priceInr: true } } } },

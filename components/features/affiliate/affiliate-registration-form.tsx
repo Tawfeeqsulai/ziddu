@@ -31,9 +31,14 @@ export default function AffiliateRegistrationForm({ identity, commissionRate }: 
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
+        const ifscCode = fields.ifscCode.trim().toUpperCase();
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
+            setError("Enter a valid 11-character IFSC code: 4 bank letters, 0, then 6 letters or numbers. Check your bank passbook.");
+            return;
+        }
         setSaving(true);
         try {
-            const response = await fetch("/api/affiliate/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields) });
+            const response = await fetch("/api/affiliate/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...fields, ifscCode }) });
             const result = await response.json() as { message?: string };
             if (!response.ok) throw new Error(result.message ?? "We could not complete registration.");
             router.replace("/affiliate");
@@ -77,7 +82,7 @@ export default function AffiliateRegistrationForm({ identity, commissionRate }: 
                         <label>Branch Name<input autoComplete="off" maxLength={80} onChange={(event) => setField("branchName", event.target.value)} placeholder="Branch (optional)" value={fields.branchName} /></label>
                         <label>Account Number *<input autoComplete="off" inputMode="numeric" maxLength={18} onChange={(event) => setField("accountNumber", event.target.value.replace(/\D/g, "").slice(0, 18))} placeholder="Bank account number" required value={fields.accountNumber} /></label>
                         <label>Confirm Account Number *<input autoComplete="off" inputMode="numeric" maxLength={18} onChange={(event) => setField("confirmAccountNumber", event.target.value.replace(/\D/g, "").slice(0, 18))} placeholder="Re-enter account number" required value={fields.confirmAccountNumber} /></label>
-                        <label>IFSC Code *<input autoComplete="off" maxLength={11} onChange={(event) => setField("ifscCode", event.target.value.toUpperCase())} placeholder="IFSC code" required value={fields.ifscCode} /></label>
+                        <label>IFSC Code *<input autoComplete="off" aria-describedby="affiliate-ifsc-help" maxLength={11} onChange={(event) => { setField("ifscCode", event.target.value.replace(/\s/g, "").toUpperCase()); setError(""); }} pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}" placeholder="11-character IFSC code" required title="Enter 4 bank letters, 0, then 6 letters or numbers." value={fields.ifscCode} /><small className="affiliate-field-help" id="affiliate-ifsc-help">11 characters: 4 bank letters, 0, and 6 more characters. Check your bank passbook.</small></label>
                         <label>UPI ID (Optional)<input autoComplete="off" maxLength={100} onChange={(event) => setField("upiId", event.target.value)} placeholder="example@okhdfcbank" value={fields.upiId} /></label>
                     </div>
                 </section>
@@ -85,7 +90,6 @@ export default function AffiliateRegistrationForm({ identity, commissionRate }: 
                 <label className="affiliate-terms-check"><input checked={fields.termsAccepted} onChange={(event) => setField("termsAccepted", event.target.checked)} required type="checkbox" /><span>I confirm my details are accurate and agree to ZIDDU&apos;s affiliate terms.</span></label>
                 {error && <p className="affiliate-inline-error" role="alert">{error}</p>}
                 <div className="affiliate-registration-actions"><Link className="affiliate-secondary" href="/profile"><ArrowLeft size={15} /> Cancel</Link><button className="affiliate-primary" disabled={saving} type="submit">{saving ? "Registering..." : "Register and start earning"}<ArrowRight size={16} /></button></div>
-                <p className="affiliate-existing-note">Already registered? <Link href="/affiliate">Open your Affiliate Hub</Link></p>
             </div>
         </form>
     </main>;

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { HandCoins, Pencil, ShoppingBag, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { BrandLogo } from "@/components/ui/brand-logo";
+import { BackButton } from "@/components/ui/back-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 
@@ -16,7 +17,10 @@ export default async function ProfilePage() {
 
   return (
     <main className="profile-page">
-      <div className="profile-brand brand-lockup"><BrandLogo /></div>
+      <header className="profile-page-header">
+        <BackButton className="profile-page-back" />
+        <div className="profile-brand brand-lockup"><BrandLogo /></div>
+      </header>
       <section className="profile-card" aria-labelledby="profile-title">
         <Avatar alt={user.name} className="profile-avatar" image={user.image} initials={user.name} size="lg" />
         <h1 id="profile-title">{user.name}</h1>
