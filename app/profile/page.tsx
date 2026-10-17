@@ -6,6 +6,7 @@ import { BrandLogo } from "@/components/ui/brand-logo";
 import { BackButton } from "@/components/ui/back-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import ProfileSignOutButton from "@/components/features/auth/profile-sign-out-button";
 
 export default async function ProfilePage() {
   const sessionUser = await getCurrentUser();
@@ -33,6 +34,7 @@ export default async function ProfilePage() {
         <Link className="profile-action" href="/orders"><ShoppingBag size={18} /><span>Order history</span></Link>
         <Link className="profile-action" href="/profile/following"><Users size={18} /><span>Following</span></Link>
         <Link className="profile-action" href="/affiliate"><HandCoins size={18} /><span>Become an Affiliate</span></Link>
+        <ProfileSignOutButton />
       </nav>
     </main>
   );

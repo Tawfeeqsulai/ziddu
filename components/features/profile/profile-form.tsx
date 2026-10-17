@@ -9,7 +9,7 @@ import { clearOnboardingLocation, readOnboardingLocation, saveOnboardingLocation
 
 const interestLabels: Record<ProfileInput["interests"][number], string> = { RESTAURANT: "Restaurants", FURNITURE: "Furniture", ELECTRONICS: "Electronics" };
 const cities = ["Chennai", "Coimbatore", "Bengaluru", "Hyderabad", "Kochi", "Madurai", "Trichy", "Salem", "Tirunelveli", "Nagercoil", "Mumbai", "Delhi", "Pune", "Kolkata"];
-type Step = 1 | 2;
+type Step = 1 | 2 | 3;
 type ProfileFormProps = { mode: "onboarding" | "edit"; initial: ProfileInput };
 
 export default function ProfileForm({ mode, initial }: ProfileFormProps) {
@@ -20,13 +20,18 @@ export default function ProfileForm({ mode, initial }: ProfileFormProps) {
   const [saving, setSaving] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
+  const hasName = Boolean(form.name.trim());
+  const locationStep: Step = hasName ? 2 : 3;
+  const totalSteps = hasName ? 2 : 3;
+  const interestsStep: Step = hasName ? 1 : 2;
   const setField = <K extends keyof ProfileInput>(field: K, value: ProfileInput[K]) => setForm((current) => ({ ...current, [field]: value }));
   const toggleInterest = (interest: ProfileInput["interests"][number]) => setField("interests", form.interests.includes(interest) ? form.interests.filter((item) => item !== interest) : [...form.interests, interest]);
 
   async function nextStep() {
     setError("");
-    if (step === 1 && form.interests.length === 0) return setError("Choose at least one interest.");
-    if (step === 1 && mode === "onboarding") {
+    if (mode === "onboarding" && !hasName && step === 1 && form.name.trim().length < 2) return setError("Enter your name to continue.");
+    if (mode === "onboarding" && step === interestsStep && form.interests.length === 0) return setError("Choose at least one interest.");
+    if (mode === "onboarding" && step === locationStep - 1) {
       try {
         const location = readOnboardingLocation();
         if (location) {
@@ -37,7 +42,7 @@ export default function ProfileForm({ mode, initial }: ProfileFormProps) {
         setError("We couldn't load your earlier location. You can find it again on the location step.");
       }
     }
-    if (step < 2) setStep((current) => (current + 1) as Step);
+    if (step < totalSteps) setStep((current) => (current + 1) as Step);
   }
 
   async function requestCurrentLocation() {
@@ -81,7 +86,7 @@ export default function ProfileForm({ mode, initial }: ProfileFormProps) {
     <form className="profile-flow" onSubmit={save}>
       <div className="profile-flow-top"><span className="section-kicker">{mode === "onboarding" ? `STEP ${step} OF 2` : "YOUR PROFILE"}</span><div className="profile-progress" aria-label={`${step} of 2 steps`}>{[1, 2].map((item) => <span className={item <= step ? "is-current" : ""} key={item} />)}</div></div>
       {mode === "onboarding" && step === 1 && <section className="profile-step"><span className="profile-step-icon profile-emoji">✦</span><h1>What are you into?</h1><p>Pick one or more so we can tune your local finds.</p><div className="interest-grid">{interestOptions.map((interest) => <button className={form.interests.includes(interest) ? "interest-option selected" : "interest-option"} key={interest} onClick={() => toggleInterest(interest)} type="button"><span>{form.interests.includes(interest) ? <Check size={16} /> : ""}</span>{interestLabels[interest]}</button>)}</div></section>}
-      {mode === "onboarding" && step === 2 && <section className="profile-step"><MapPin className="profile-step-icon" size={24} /><h1>Stay local.</h1><p>Choose a place for better nearby discovery. You can change it anytime.</p><label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{[...new Set([...cities, ...(form.city && !cities.includes(form.city) ? [form.city] : [])])].map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input autoFocus value={form.locality} onChange={(event) => setField("locality", event.target.value)} placeholder="For example, Anna Nagar" /></label><button className="profile-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button"><MapPin size={15} />{locationBusy ? "Finding your location..." : locationMessage ? "Update my current location" : "Use my current location"}</button>{locationMessage && <p aria-live="polite" className="profile-location-success">{locationMessage} is ready to use.</p>}</section>}
+      {mode === "onboarding" && step === 2 && <section className="profile-step"><MapPin className="profile-step-icon" size={24} /><h1>Stay local.</h1><p>Choose a place for better nearby discovery. You can change it anytime.</p>{!form.name && <label>Your name<input autoComplete="name" autoFocus value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder="Enter your name" required /></label>}<label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{[...new Set([...cities, ...(form.city && !cities.includes(form.city) ? [form.city] : [])])].map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input autoFocus={Boolean(form.name)} value={form.locality} onChange={(event) => setField("locality", event.target.value)} placeholder="For example, Anna Nagar" /></label><button className="profile-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button"><MapPin size={15} />{locationBusy ? "Finding your location..." : locationMessage ? "Update my current location" : "Use my current location"}</button>{locationMessage && <p aria-live="polite" className="profile-location-success">{locationMessage} is ready to use.</p>}</section>}
       {mode === "edit" && <section className="profile-step"><h1>Edit your profile.</h1><p>Keep your ZIDDU identity current.</p><label>Name<input autoFocus value={form.name} onChange={(event) => setField("name", event.target.value)} /></label><label>Username <small>optional</small><input value={form.username ?? ""} onChange={(event) => setField("username", event.target.value)} /></label><label>Bio <small>optional</small><textarea value={form.bio ?? ""} onChange={(event) => setField("bio", event.target.value)} maxLength={160} placeholder="A little about you" /></label><div className="interest-grid">{interestOptions.map((interest) => <button className={form.interests.includes(interest) ? "interest-option selected" : "interest-option"} key={interest} onClick={() => toggleInterest(interest)} type="button"><span>{form.interests.includes(interest) ? <Check size={16} /> : ""}</span>{interestLabels[interest]}</button>)}</div><label>City<select value={form.city} onChange={(event) => setField("city", event.target.value)}><option value="">Choose your city</option>{[...new Set([...cities, ...(form.city && !cities.includes(form.city) ? [form.city] : [])])].map((city) => <option key={city}>{city}</option>)}</select></label><label>Locality / area<input value={form.locality} onChange={(event) => setField("locality", event.target.value)} /></label><button className="profile-location-button" disabled={locationBusy} onClick={() => { void requestCurrentLocation(); }} type="button"><MapPin size={15} />{locationBusy ? "Finding your location..." : locationMessage ? "Update my current location" : "Use my current location"}</button>{locationMessage && <p aria-live="polite" className="profile-location-success">{locationMessage} is ready to use.</p>}</section>}
       {error && <p className="profile-error" role="alert">{error}</p>}
       <div className="profile-flow-actions">{mode === "onboarding" && step > 1 && <button className="profile-back" onClick={() => setStep((current) => (current - 1) as Step)} type="button"><ArrowLeft size={16} /> Back</button>}{mode === "edit" && <button className="profile-back" onClick={() => router.push("/profile")} type="button"><ArrowLeft size={16} /> Cancel</button>} {mode === "onboarding" && step < 2 ? <button className="confirm-button" onClick={() => { void nextStep(); }} type="button">Continue <ArrowRight size={16} /></button> : <button className="confirm-button" disabled={saving} type="submit">{saving ? "Saving..." : mode === "onboarding" ? "Finish setup" : "Save profile"} <Check size={16} /></button>}</div>

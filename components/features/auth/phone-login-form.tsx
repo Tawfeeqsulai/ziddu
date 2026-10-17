@@ -22,7 +22,6 @@ function normalizePhoneInput(value: string): string | null {
 export default function PhoneLoginForm({ developmentOtp }: PhoneLoginFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<LoginStep>("phone");
-  const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [normalizedPhone, setNormalizedPhone] = useState("");
   const [code, setCode] = useState("");
@@ -76,11 +75,6 @@ export default function PhoneLoginForm({ developmentOtp }: PhoneLoginFormProps) 
   async function submitPhone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const phone = normalizePhoneInput(phoneInput);
-    const name = nameInput.trim();
-    if (name.length < 2) {
-      setError("Enter your name to continue.");
-      return;
-    }
     if (!phone) {
       setError("Enter a valid 10-digit Indian mobile number.");
       return;
@@ -105,7 +99,7 @@ export default function PhoneLoginForm({ developmentOtp }: PhoneLoginFormProps) 
       const response = await fetch("/api/auth/phone-number/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone, code, name: nameInput.trim() }),
+        body: JSON.stringify({ phoneNumber: normalizedPhone, code }),
       });
       if (!response.ok) {
         setError(response.status === 429
@@ -137,15 +131,6 @@ export default function PhoneLoginForm({ developmentOtp }: PhoneLoginFormProps) 
 
         {step === "phone" ? (
           <form className="login-form" onSubmit={submitPhone}>
-            <label className="login-field-label" htmlFor="login-name">Your name</label>
-            <input
-              autoComplete="name"
-              id="login-name"
-              onChange={(event) => { setNameInput(event.target.value); setError(""); }}
-              placeholder="Enter your name"
-              required
-              value={nameInput}
-            />
             <div className="phone-input-wrap">
               <span className="country-prefix">+91 <i /></span>
               <input

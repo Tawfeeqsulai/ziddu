@@ -19,7 +19,7 @@ const defaultItems: NavigationItem[] = [
 ];
 const AppNavigationContext = createContext(false);
 
-export function BottomNavigation({ items = defaultItems, global = false }: { items?: NavigationItem[]; global?: boolean } = {}) {
+export function BottomNavigation({ items = defaultItems, global = false, showProfile = false }: { items?: NavigationItem[]; global?: boolean; showProfile?: boolean } = {}) {
   const inAppNavigation = useContext(AppNavigationContext);
   const pathname = usePathname();
   const router = useRouter();
@@ -40,7 +40,7 @@ export function BottomNavigation({ items = defaultItems, global = false }: { ite
     }))
     : [...items, ...(items.some((item) => item.label === "Saved") ? [] : [{ label: "Saved", icon: Bookmark, onClick: () => router.push("/saved") }])];
   const aiItem = { label: "ZIDDU AI", icon: Sparkles, active: global && pathname.startsWith("/ai"), onClick: () => router.push("/ai") };
-  const otherItems = navigationItemsSource.filter((item) => item.label !== "ZIDDU AI" && item.label !== "Offers" && item.label !== "Profile");
+  const otherItems = navigationItemsSource.filter((item) => item.label !== "ZIDDU AI" && item.label !== "Offers" && (showProfile || item.label !== "Profile"));
   const navigationItems = [...otherItems.slice(0, 2), aiItem, ...otherItems.slice(2)];
   return <nav aria-label="Primary navigation" className="ui-bottom-navigation">
     <svg aria-hidden="true" className="ui-bottom-navigation-surface" preserveAspectRatio="none" viewBox="0 0 400 112">

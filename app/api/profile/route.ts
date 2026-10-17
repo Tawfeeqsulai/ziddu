@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { normalizeUsername, profileInputSchema, profileValues } from "@/lib/profile";
 import { AFFILIATE_REFERRAL_COOKIE, readReferralCookieValue } from "@/lib/affiliate/referral-cookie";
 import { attributeCustomerSignup } from "@/services/affiliate.service";
+import { syncSharedOrderingUser } from "@/lib/userbilling/shared-user";
 
 async function saveProfile(request: Request, complete: boolean) {
   const currentUser = await getCurrentUser();
@@ -45,6 +46,13 @@ async function saveProfile(request: Request, complete: boolean) {
   if (values.phoneNumber) {
     const existing = await prisma.user.findFirst({ where: { phoneNumber: values.phoneNumber, NOT: { id: userId } }, select: { id: true } });
     if (existing) return NextResponse.json({ message: "That mobile number is already linked to another account." }, { status: 409 });
+  }
+  if (complete && account.phoneNumber) {
+    try {
+      await syncSharedOrderingUser(account.phoneNumber);
+    } catch {
+      return NextResponse.json({ message: "We couldn't connect your ordering account. Please try again." }, { status: 503 });
+    }
   }
   let user;
   try {

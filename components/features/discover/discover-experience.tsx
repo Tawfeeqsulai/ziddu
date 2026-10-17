@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  Bell,
   Bookmark,
   Check,
   ChevronDown,
@@ -38,7 +39,7 @@ type DiscoverExperienceProps = {
 };
 
 const categoryFilters = ["For you", ...BUSINESS_CATEGORIES.map((category) => BUSINESS_CATEGORY_LABELS[category])];
-const mediaFilters = ["All", "Reels", "Posts", "Offers"] as const;
+const mediaFilters = ["All", "Food", "Stores", "Services"] as const;
 type MediaFilter = (typeof mediaFilters)[number];
 
 function formatPrice(price: number) {
@@ -94,11 +95,6 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
     return showAllShops ? matchingShops : matchingShops.slice(0, 3);
   }, [activeCategory, data.shops, showAllShops]);
 
-  const followedStories = useMemo(() => data.stories
-    .filter((story) => following.includes(story.shopId))
-    .map((story) => ({ ...story, shop: data.shops.find((shop) => shop.id === story.shopId) }))
-    .filter((story): story is typeof story & { shop: Shop } => Boolean(story.shop)), [data.shops, data.stories, following]);
-
   const filteredPosts = useMemo(() => {
     return data.posts.filter((post) => {
       const shop = shopForPost(post, data.shops);
@@ -107,9 +103,9 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
         BUSINESS_CATEGORY_LABELS[shop.category] === activeCategory;
       const matchesMedia =
         activeMediaFilter === "All" ||
-        activeMediaFilter === "Offers" && post.kind === "offer" ||
-        activeMediaFilter === "Reels" && (post.mediaType === "video" || post.kind === "reel") ||
-        activeMediaFilter === "Posts" && post.mediaType === "image";
+        activeMediaFilter === "Food" && shop.category === "RESTAURANT" ||
+        activeMediaFilter === "Stores" && shop.category !== "RESTAURANT" ||
+        activeMediaFilter === "Services";
       const matchesFollowing = activeTab !== "Following" || following.includes(shop.id);
       return matchesCategory && matchesMedia && matchesFollowing;
     });
@@ -172,7 +168,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
           <Link href="/saved">Saved</Link>
           <Link className="desktop-nav-ai" href="/ai"><Sparkles size={13} /> AI</Link>
         </nav>
-        <div className="top-actions">
+        <div className="top-actions home-desktop-actions">
           <button aria-label="Scan UPI payment QR" className="icon-button upi-scan-trigger" onClick={() => setShowUpiScanner(true)} title="Scan UPI payment QR" type="button">
             <QrCode size={19} />
           </button>
@@ -181,6 +177,10 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
             {Object.values(cart).reduce((total, count) => total + count, 0) > 0 && <span className="cart-count">{Object.values(cart).reduce((total, count) => total + count, 0)}</span>}
           </Link>
           <SessionControl />
+        </div>
+        <div className="home-mobile-actions">
+          <button aria-label="Notifications" className="home-mobile-icon" type="button"><Bell size={17} /></button>
+          <SessionControl iconButton />
         </div>
       </header>
 
@@ -239,20 +239,9 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
           </section> : <>
 
 
-            <section className="stories-section" aria-label="Recent Reels from followed shops">
-              <div className="shop-story-row">
-                {followedStories.map(({ shop, postId }, index) => (
-                  <button className="shop-story" key={shop.id} onClick={() => router.push(`/reels?post=${encodeURIComponent(postId)}`)} type="button">
-                    <span className={`story-ring ${index === 0 ? "story-ring-hot" : ""}`}><span className="story-image" style={{ backgroundImage: `url("${shop.image}")` }} /></span>
-                    <span className="story-name">{shop.name}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
             <section className="feed-section">
 
-              <div aria-label="Filter by post type" className="media-filter-tabs" role="tablist">
+              <div aria-label="Filter home feed" className="media-filter-tabs home-filter-tabs" role="tablist">
                 {mediaFilters.map((filter) => <button aria-selected={activeMediaFilter === filter} className={`media-filter-tab ${activeMediaFilter === filter ? "selected" : ""}`} key={filter} onClick={() => setActiveMediaFilter(filter)} role="tab" type="button">{filter}</button>)}
               </div>
               <div className="category-tabs" role="tablist" aria-label="Filter discoveries">
@@ -293,7 +282,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
           </section>
 
           <section className="rail-section popular-section">
-            <div className="rail-section-heading"><div><span className="section-kicker">NEIGHBORS LOVE THESE</span><h3>Worth a little walk</h3></div><button aria-label="More popular shops" type="button"><ArrowUpRight size={15} /></button></div>
+            <div className="rail-section-heading"><div><span className="section-kicker">NEIGHBORS LOVE THESE</span><h3>Worth a little walk</h3></div><button aria-label="More popular shops" onClick={() => setShowAllShops(true)} type="button"><ArrowUpRight size={15} /></button></div>
             <div className="popular-list">{filteredShops.map((shop, index) => <div className="popular-shop" key={shop.id}><span className="popular-number">0{index + 1}</span><span className="popular-avatar" style={{ backgroundImage: `url("${shop.image}")` }} /><div className="popular-info"><strong>{shop.name}</strong><span>{BUSINESS_CATEGORY_LABELS[shop.category]}</span></div><span className="popular-rating">★ {shop.rating}</span></div>)}</div>
             {filteredShops.length === 0 && <p className="rail-empty">No shops match that yet.</p>}
           </section>
@@ -308,10 +297,10 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
         </aside>
       </div>
 
-      <BottomNavigation items={[
+      <BottomNavigation showProfile items={[
         { label: "Home", icon: Home, active: activeTab === "For you", onClick: () => setActiveTab("For you") },
-        { label: "Discover", icon: Compass, active: activeTab === "Explore", onClick: () => router.push("/search") },
-        { label: "Reels", icon: Clapperboard, active: activeMediaFilter === "Reels", onClick: () => router.push("/reels") },
+        { label: "Explore", icon: Compass, active: activeTab === "Explore", onClick: () => router.push("/search") },
+        { label: "Saved", icon: Bookmark, onClick: () => router.push("/saved") },
         { label: "Profile", icon: UserRound, onClick: () => router.push("/profile") },
       ]} />
 
