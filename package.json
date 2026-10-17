@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma generate --schema prisma/schema.shared.prisma && next build",
     "start": "next start",
     "lint": "eslint",
-    "db:generate": "prisma generate",
+    "db:generate": "prisma generate && prisma generate --schema prisma/schema.shared.prisma",
+    "db:generate:shared": "prisma generate --schema prisma/schema.shared.prisma",
     "db:push": "prisma db push",
     "db:seed": "node --env-file=.env prisma/seed.cjs"
   },

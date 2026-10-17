@@ -1,0 +1,525 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum BusinessCategory {
+  RESTAURANT
+  FURNITURE
+  ELECTRONICS
+}
+
+enum PostType {
+  IMAGE
+  VIDEO
+}
+
+enum UserType {
+  VENDOR
+  EMPLOYEE
+  END_USER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum VendorStatus {
+  VERIFIED
+  UNVERIFIED
+}
+
+enum OfferTargetType {
+  CATEGORY
+  SUBCATEGORY
+  ITEM
+}
+
+enum OfferType {
+  FIXED
+  PERCENTAGE
+  BUY_GET
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum AffiliateStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum AffiliateReferralType {
+  CUSTOMER
+  VENDOR
+}
+
+enum AffiliateReferralStatus {
+  REGISTERED
+  CONVERTED
+  REJECTED
+}
+
+enum AffiliateCommissionType {
+  CUSTOMER_ORDER
+  VENDOR_REGISTRATION
+  VENDOR_DINE_IN
+}
+
+enum AffiliateCommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum AffiliateWithdrawalStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  username      String?   @unique
+  bio           String?
+  city          String?
+  locality      String?
+  address       String?
+  state         String?
+  pincode       String?
+  latitude      Float?
+  longitude     Float?
+  interests     Json      @default("[]")
+  userType      UserType  @default(END_USER)
+  phoneNumber   String?   @unique
+  phoneNumberVerified Boolean @default(false)
+  status        AccountStatus @default(ACTIVE)
+  onboardingCompleted Boolean @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  ownedShops    Shop[]
+  follows       Follow[]
+  likes         Like[]
+  saves         Save[]
+  bills         Bill[]    @relation("BillEndUser")
+  affiliate     Affiliate?
+  affiliateReferrals AffiliateReferral[] @relation("AffiliateReferredUser")
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId             String
+  userId                String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                  String?   @db.Text
+  password               String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model PhoneOtp {
+  id          String   @id @default(cuid())
+  phoneNumber String   @unique
+  codeHash    String
+  expiresAt   DateTime
+  lastSentAt  DateTime @default(now())
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("phone_otp")
+}
+
+model Shop {
+  id         String           @id @default(cuid())
+  name       String
+  handle     String           @unique
+  category   BusinessCategory
+  vendorStatus VendorStatus @default(UNVERIFIED)
+  status     String
+  rating     Float
+  initials   String
+  image      String
+  coverImage String?
+  description String?
+  businessHours String?
+  email      String?
+  phone      String?
+  payment    Json?
+  workingDays Json @default("[]")
+  ownerId    String?
+  locationId String
+  owner      User?            @relation(fields: [ownerId], references: [id])
+  location   Location         @relation(fields: [locationId], references: [id])
+  posts      Post[]
+  products   Product[]
+  menuCategories MenuCategory[]
+  menuSubCategories MenuSubCategory[]
+  offers     Offer[]
+  follows    Follow[]
+  purchases  Purchase[]
+  bills      Bill[]
+  affiliateReferrals AffiliateReferral[] @relation("AffiliateReferredShop")
+
+  @@index([category, locationId])
+  @@map("shop")
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  address   String
+  locality  String
+  city      String
+  state     String
+  pincode   String?
+  latitude  Float?
+  longitude Float?
+  shops     Shop[]
+
+  @@index([city, locality])
+  @@map("location")
+}
+
+model Post {
+  id               String    @id @default(cuid())
+  shopId           String
+  offerId          String?   @unique
+  type             PostType
+  postCategory     String?
+  title            String
+  description      String
+  mediaUrl         String
+  thumbnailUrl     String?
+  altText          String?
+  isOfferIncluded  Boolean   @default(false)
+  isDownloaded     Boolean   @default(false)
+  hashtags         Json      @default("[]")
+  publishedAt      DateTime  @default(now())
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  offer            Offer?    @relation(fields: [offerId], references: [id])
+  likes            Like[]
+  saves            Save[]
+
+  @@index([shopId, publishedAt])
+  @@map("post")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  description String
+  priceInr    Float
+  imageUrl    String?
+  menuCategoryId String?
+  menuSubCategoryId String?
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  menuCategory MenuCategory? @relation(fields: [menuCategoryId], references: [id])
+  menuSubCategory MenuSubCategory? @relation(fields: [menuSubCategoryId], references: [id])
+  offers      Offer[]
+
+  @@index([shopId, isAvailable])
+  @@map("product")
+}
+
+model MenuCategory {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  subCategories MenuSubCategory[]
+  products    Product[]
+
+  @@index([shopId, name])
+  @@map("menu_category")
+}
+
+model MenuSubCategory {
+  id             String   @id @default(cuid())
+  shopId         String
+  categoryId     String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  category       MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products       Product[]
+
+  @@index([shopId, categoryId])
+  @@map("menu_sub_category")
+}
+
+model Offer {
+  id             String          @id @default(cuid())
+  shopId         String
+  targetType     OfferTargetType
+  targetId       String
+  offerType      OfferType
+  offerValue     Json
+  validityFrom   DateTime
+  validityTo     DateTime
+  productId      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  shop           Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product        Product?        @relation(fields: [productId], references: [id])
+    posts          Post[]
+
+  @@index([shopId, validityFrom, validityTo])
+  @@index([targetType, targetId])
+  @@map("offer")
+}
+
+model Follow {
+  id         String   @id @default(cuid())
+  userId     String
+  shopId     String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shopId])
+  @@index([shopId, createdAt])
+  @@map("follow")
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId, createdAt])
+  @@map("like")
+}
+
+model Save {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId, createdAt])
+  @@map("save")
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  shopId    String
+  item      String
+  date      String
+  totalInr  Int
+  status    String
+  shop      Shop     @relation(fields: [shopId], references: [id])
+
+  @@index([shopId])
+  @@map("purchase")
+}
+
+model Bill {
+  id            String        @id @default(cuid())
+  shopId        String
+  endUserId     String
+  products      Json
+  totalPriceInr Float         @default(0)
+  paymentStatus PaymentStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  shop          Shop          @relation(fields: [shopId], references: [id])
+  endUser       User          @relation("BillEndUser", fields: [endUserId], references: [id])
+  affiliateCommissions AffiliateCommission[] @relation("AffiliateCommissionBill")
+
+  @@index([shopId, createdAt])
+  @@index([endUserId, createdAt])
+  @@map("bill")
+}
+
+model Affiliate {
+  id            String                   @id @default(cuid())
+  userId        String                   @unique
+  affiliateCode String                   @unique
+  status        AffiliateStatus          @default(ACTIVE)
+  withdrawalRevision Int                 @default(0)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referrals     AffiliateReferral[]
+  clicks        AffiliateClick[]
+  commissions   AffiliateCommission[]
+  withdrawals   AffiliateWithdrawal[]
+  bankAccounts  AffiliateBankAccount[]
+
+  @@index([status, createdAt])
+  @@map("affiliate")
+}
+
+model AffiliateReferral {
+  id             String                 @id @default(cuid())
+  affiliateId    String
+  referralKey    String                 @unique
+  referralType   AffiliateReferralType
+  referredUserId String?
+  referredShopId String?
+  status         AffiliateReferralStatus @default(REGISTERED)
+  registeredAt   DateTime               @default(now())
+  convertedAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  affiliate      Affiliate              @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referredUser   User?                  @relation("AffiliateReferredUser", fields: [referredUserId], references: [id])
+  referredShop   Shop?                  @relation("AffiliateReferredShop", fields: [referredShopId], references: [id])
+  commissions    AffiliateCommission[]
+
+  @@index([affiliateId, referralType, status, createdAt])
+  @@index([referredUserId])
+  @@index([referredShopId])
+  @@map("affiliate_referral")
+}
+
+model AffiliateClick {
+  id           String                 @id @default(cuid())
+  affiliateId  String
+  referralType AffiliateReferralType
+  referralCode String
+  converted    Boolean                @default(false)
+  createdAt    DateTime               @default(now())
+  affiliate    Affiliate              @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId, createdAt])
+  @@index([affiliateId, referralType, converted, createdAt])
+  @@map("affiliate_click")
+}
+
+model AffiliateCommission {
+  id              String                    @id @default(cuid())
+  affiliateId     String
+  referralId      String
+  eventKey        String                    @unique
+  commissionType  AffiliateCommissionType
+  sourceBillId    String?
+  baseAmount      Float
+  commissionRate  Float?
+  fixedAmount     Float?
+  commissionAmount Float
+  status          AffiliateCommissionStatus @default(PENDING)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  affiliate       Affiliate                 @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referral        AffiliateReferral         @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  sourceBill      Bill?                     @relation("AffiliateCommissionBill", fields: [sourceBillId], references: [id])
+
+  @@index([affiliateId, status, createdAt])
+  @@index([referralId, createdAt])
+  @@index([sourceBillId])
+  @@map("affiliate_commission")
+}
+
+model AffiliateWithdrawal {
+  id            String                   @id @default(cuid())
+  affiliateId   String
+  requestKey    String                   @unique
+  amount        Float
+  paymentMethod String                   @default("BANK_TRANSFER")
+  bankAccountId String?
+  status        AffiliateWithdrawalStatus @default(PENDING)
+  requestedAt   DateTime                 @default(now())
+  processedAt   DateTime?
+  referenceCode String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  affiliate     Affiliate                @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  bankAccount   AffiliateBankAccount?    @relation(fields: [bankAccountId], references: [id])
+
+  @@index([affiliateId, status, requestedAt])
+  @@map("affiliate_withdrawal")
+}
+
+model AffiliateBankAccount {
+  id                String               @id @default(cuid())
+  affiliateId       String
+  accountHolderName String
+  bankName          String
+  branchName        String?
+  accountLast4      String
+  ifscCode          String
+  upiId             String?
+  verified          Boolean              @default(false)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  affiliate         Affiliate            @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  withdrawals       AffiliateWithdrawal[]
+
+  @@index([affiliateId, createdAt])
+  @@map("affiliate_bank_account")
+}

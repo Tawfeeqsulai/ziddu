@@ -1,0 +1,153 @@
+generator sharedClient {
+  provider = "prisma-client-js"
+  output   = "../lib/db/generated/shared"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model SharedUser {
+  id          Int       @id @default(autoincrement())
+  phoneNumber String    @map("phone_number") @db.VarChar(15)
+  userType    String    @map("user_type") @db.VarChar(20)
+  status      String    @db.VarChar(20)
+  createdAt   DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime? @map("updated_at") @db.Timestamp(0)
+  vendors     SharedVendor[]
+  bills       SharedBill[]
+
+  @@map("users")
+}
+
+model SharedVendor {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  businessName     String?   @map("business_name") @db.VarChar(255)
+  status           String    @db.VarChar(20)
+  email            String?   @db.VarChar(255)
+  logoUrl          String?   @map("logo_url") @db.Text
+  businessCategory String?   @map("business_category") @db.VarChar(255)
+  address          String?   @db.Text
+  payment          Json?
+  workingDays      Json?     @map("working_days")
+  createdAt        DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime? @map("updated_at") @db.Timestamp(0)
+  user             SharedUser @relation(fields: [userId], references: [id])
+  posts            SharedPost[]
+  menuCategories   SharedMenuCategory[]
+  menuSubCategories SharedMenuSubCategory[]
+  menuItems        SharedMenuItem[]
+  offers           SharedOffer[]
+  bills            SharedBill[]
+
+  @@unique([userId])
+  @@index([userId])
+  @@map("vendors")
+}
+
+model SharedPost {
+  id             Int       @id @default(autoincrement())
+  vendorId       Int       @map("vendor_id")
+  postType       String    @map("post_type") @db.VarChar(20)
+  postCategory   String?   @map("post_category") @db.VarChar(255)
+  postUrl        String    @map("post_url") @db.Text
+  isOfferIncluded Boolean  @default(false) @map("is_offer_included")
+  offerId        Int?      @map("offer_id")
+  isDownloaded   Boolean   @default(false) @map("is_downloaded")
+  createdAt      DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime? @map("updated_at") @db.Timestamp(0)
+  vendor         SharedVendor @relation(fields: [vendorId], references: [id])
+  offer          SharedOffer? @relation(fields: [offerId], references: [id])
+
+  @@index([vendorId])
+  @@index([offerId])
+  @@map("posts")
+}
+
+model SharedMenuCategory {
+  id            Int       @id @default(autoincrement())
+  vendorId      Int       @map("vendor_id")
+  categoryName  String    @map("category_name") @db.VarChar(255)
+  categoryImage String?   @map("category_image") @db.Text
+  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime? @map("updated_at") @db.Timestamp(0)
+  vendor        SharedVendor @relation(fields: [vendorId], references: [id])
+  subCategories SharedMenuSubCategory[]
+  items         SharedMenuItem[]
+
+  @@index([vendorId])
+  @@map("menu_categories")
+}
+
+model SharedMenuSubCategory {
+  id              Int       @id @default(autoincrement())
+  vendorId        Int       @map("vendor_id")
+  categoryId      Int       @map("category_id")
+  subCategoryName String    @map("sub_category_name") @db.VarChar(255)
+  createdAt       DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime? @map("updated_at") @db.Timestamp(0)
+  vendor          SharedVendor @relation(fields: [vendorId], references: [id])
+  category        SharedMenuCategory @relation(fields: [categoryId], references: [id])
+  items           SharedMenuItem[]
+
+  @@index([vendorId])
+  @@index([categoryId])
+  @@map("menu_sub_categories")
+}
+
+model SharedMenuItem {
+  id               Int       @id @default(autoincrement())
+  vendorId         Int       @map("vendor_id")
+  menuCategoryId   Int       @map("menu_category_id")
+  menuSubCategoryId Int?     @map("menu_sub_category_id")
+  productName      String    @map("product_name") @db.VarChar(255)
+  image            String?   @db.Text
+  price            Decimal   @db.Decimal(10, 2)
+  createdAt        DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime? @map("updated_at") @db.Timestamp(0)
+  vendor           SharedVendor @relation(fields: [vendorId], references: [id])
+  category         SharedMenuCategory @relation(fields: [menuCategoryId], references: [id])
+  subCategory      SharedMenuSubCategory? @relation(fields: [menuSubCategoryId], references: [id])
+
+  @@index([vendorId])
+  @@index([menuCategoryId])
+  @@index([menuSubCategoryId])
+  @@map("menu_items")
+}
+
+model SharedOffer {
+  id              Int       @id @default(autoincrement())
+  vendorId        Int       @map("vendor_id")
+  offerTargetType String?   @map("offer_target_type") @db.VarChar(20)
+  offerTargetId   Int?      @map("offer_target_id")
+  offerType       String    @map("offer_type") @db.VarChar(20)
+  offerValue      Json?     @map("offer_value")
+  validityFrom    DateTime? @map("validity_from")
+  validityTo      DateTime? @map("validity_to")
+  createdAt       DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime? @map("updated_at") @db.Timestamp(0)
+  vendor          SharedVendor @relation(fields: [vendorId], references: [id])
+  posts           SharedPost[]
+
+  @@index([vendorId])
+  @@map("offers")
+}
+
+model SharedBill {
+  id            Int       @id @default(autoincrement())
+  vendorId      Int       @map("vendor_id")
+  endUserId     Int?      @map("end_user_id")
+  products      Json
+  totalPrice    Decimal   @default(0) @map("total_price") @db.Decimal(10, 2)
+  paymentStatus String    @default("paid") @map("payment_status") @db.VarChar(20)
+  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime? @map("updated_at") @db.Timestamp(0)
+  vendor        SharedVendor @relation(fields: [vendorId], references: [id])
+  endUser       SharedUser? @relation(fields: [endUserId], references: [id])
+
+  @@index([vendorId])
+  @@index([endUserId])
+  @@map("bills")
+}

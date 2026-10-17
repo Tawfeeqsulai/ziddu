@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 !prisma/ca.pem
+lib/db/generated/
 
 # debug
 npm-debug.log*

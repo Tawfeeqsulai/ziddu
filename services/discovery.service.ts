@@ -1,5 +1,6 @@
 import type { DiscoveryData } from "@/types/commerce";
 import { prisma } from "@/lib/db/prisma";
+import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
 
@@ -96,7 +97,49 @@ function mapDatabaseData(posts: Array<{
   };
 }
 
+async function getSharedDiscoveryData(): Promise<DiscoveryData> {
+  const records = await sharedPrisma.sharedPost.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { vendor: { include: { user: true } }, offer: true },
+  });
+
+  const shops = Array.from(new Map(records.map((record) => [record.vendor.id, record.vendor])).values()).map((vendor) => {
+    const name = vendor.businessName?.trim() || `Vendor ${vendor.id}`;
+    const category = vendor.businessCategory?.toUpperCase();
+    const normalizedCategory = category === "RESTAURANT" || category === "FURNITURE" || category === "ELECTRONICS" ? category : "RESTAURANT";
+    return {
+      id: String(vendor.id), name, handle: `vendor-${vendor.id}`, category: normalizedCategory,
+      distance: "Nearby", area: "", city: "", state: "", status: vendor.status.toLowerCase() === "inactive" ? "Closed" as const : "Open now" as const,
+      rating: 0, initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+      image: vendor.logoUrl || "/ziddu-logo.png", address: vendor.address || "", owner: "", phone: vendor.user.phoneNumber,
+    } satisfies DiscoveryData["shops"][number];
+  });
+  const posts = records.map((record) => {
+    const offerValue = record.offer?.offerValue && typeof record.offer.offerValue === "object" ? record.offer.offerValue as { priceInr?: number; originalPriceInr?: number; badge?: string } : {};
+    const mediaType = record.postType.toLowerCase() === "video" ? "video" as const : "image" as const;
+    const title = `${record.vendor.businessName || "Local vendor"} ${record.postCategory || "update"}`;
+    return {
+      id: String(record.id), shopId: String(record.vendorId), kind: record.isOfferIncluded ? "offer" as const : mediaType === "video" ? "reel" as const : "post" as const,
+      title, description: `${record.vendor.businessName || "Local vendor"} shared a new ${record.postCategory || "post"}.`, image: record.postUrl, imageAlt: title,
+      likes: 0, publishedAt: (record.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? record.postUrl : undefined,
+      hashtags: record.postCategory ? [`#${record.postCategory.replace(/\s+/g, "")}`] : [], price: offerValue.priceInr,
+      originalPrice: offerValue.originalPriceInr, badge: offerValue.badge, liked: false, saved: false,
+    } satisfies DiscoveryData["posts"][number];
+  });
+  return { shops, posts, stories: [], purchases: [] };
+}
+
 export async function getDiscoveryData(userId: string): Promise<DiscoveryData> {
+  void userId;
+  try {
+    return await getSharedDiscoveryData();
+  } catch (error) {
+    console.error("Unable to load shared discovery data.", error);
+    return getLegacyDiscoveryData(userId);
+  }
+}
+
+async function getLegacyDiscoveryData(userId: string): Promise<DiscoveryData> {
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { city: true, locality: true, latitude: true, longitude: true } });
     const now = new Date();

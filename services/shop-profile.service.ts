@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
 import type { FeedPost, Shop } from "@/types/commerce";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
@@ -13,7 +14,74 @@ function getOfferValues(value: unknown): OfferValue {
   return value && typeof value === "object" ? value as OfferValue : {};
 }
 
+async function getSharedShopProfile(id: string): Promise<ShopProfile | null> {
+  const vendorId = Number.parseInt(id, 10);
+  if (!Number.isInteger(vendorId)) return null;
+  let record = await sharedPrisma.sharedVendor.findUnique({
+    where: { id: vendorId },
+    include: {
+      user: true,
+      posts: { orderBy: { createdAt: "desc" }, include: { offer: true } },
+      offers: { include: { posts: true }, orderBy: { validityTo: "asc" } },
+      menuItems: { include: { category: true }, orderBy: { productName: "asc" } },
+    },
+  });
+  if (!record) {
+    const linkedPost = await sharedPrisma.sharedPost.findUnique({ where: { id: vendorId }, select: { vendorId: true } });
+    if (linkedPost) {
+      record = await sharedPrisma.sharedVendor.findUnique({
+        where: { id: linkedPost.vendorId },
+        include: {
+          user: true,
+          posts: { orderBy: { createdAt: "desc" }, include: { offer: true } },
+          offers: { include: { posts: true }, orderBy: { validityTo: "asc" } },
+          menuItems: { include: { category: true }, orderBy: { productName: "asc" } },
+        },
+      });
+    }
+  }
+  if (!record) return null;
+
+  const name = record.businessName?.trim() || `Vendor ${record.id}`;
+  const rawCategory = record.businessCategory?.toUpperCase();
+  const category = rawCategory === "RESTAURANT" || rawCategory === "FURNITURE" || rawCategory === "ELECTRONICS" ? rawCategory : "RESTAURANT";
+  const shop: Shop & { description: string; pincode?: string; followerCount: number; workingDays: string[]; distanceLabel: string } = {
+    id: String(record.id), name, handle: `vendor-${record.id}`, category, distance: "Nearby", area: "", city: "", state: "",
+    status: record.status.toLowerCase() === "inactive" ? "Closed" : "Open now", rating: 0,
+    initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(), image: record.logoUrl || "/ziddu-logo.png",
+    address: record.address || "", owner: "", phone: record.user.phoneNumber || undefined, description: "", followerCount: 0,
+    workingDays: readStringArray(record.workingDays), distanceLabel: "Nearby",
+  };
+  const posts: FeedPost[] = record.posts.map((post) => {
+    const mediaType = post.postType.toLowerCase() === "video" ? "video" as const : "image" as const;
+    const title = `${name} ${post.postCategory || "update"}`;
+    const values = getOfferValues(post.offer?.offerValue);
+    return {
+      id: String(post.id), shopId: String(record.id), kind: post.isOfferIncluded ? "offer" as const : mediaType === "video" ? "reel" as const : "post" as const,
+      title, description: `${name} shared a new ${post.postCategory || "post"}.`, image: post.postUrl, imageAlt: title, likes: 0,
+      publishedAt: (post.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? post.postUrl : undefined,
+      hashtags: post.postCategory ? [`#${post.postCategory.replace(/\s+/g, "")}`] : [], price: values.priceInr,
+      originalPrice: values.originalPriceInr, badge: values.badge, liked: false, saved: false,
+    };
+  });
+  const offers: ShopOffer[] = record.offers.map((offer) => {
+    const values = getOfferValues(offer.offerValue);
+    const post = offer.posts[0];
+    return {
+      postId: post ? String(post.id) : String(offer.id), title: `${name} offer`, description: `A ${offer.offerType.toLowerCase()} offer from ${name}.`,
+      price: values.priceInr, originalPrice: values.originalPriceInr, badge: values.badge,
+      validUntil: offer.validityTo?.toISOString(),
+    };
+  });
+  const products: ShopProduct[] = record.menuItems.map((item) => ({
+    id: String(item.id), name: item.productName, description: `${item.productName} from ${name}.`, image: item.image || undefined,
+    price: Number(item.price), category: item.category.categoryName,
+  }));
+  return { shop, posts, offers, products };
+}
+
 export async function getShopProfile(id: string, userId?: string): Promise<ShopProfile | null> {
+  if (/^\d+$/.test(id)) return getSharedShopProfile(id);
   const viewer = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { city: true, locality: true, latitude: true, longitude: true } }) : null;
   const record = await prisma.shop.findUnique({
       where: { id },
