@@ -24,7 +24,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { BUSINESS_CATEGORIES, BUSINESS_CATEGORY_LABELS, type DiscoveryData, type FeedPost, type Purchase, type Shop } from "@/types/commerce";
+import { BUSINESS_CATEGORY_LABELS, type DiscoveryData, type FeedPost, type Purchase, type Shop } from "@/types/commerce";
 import PostCard from "@/components/features/discover/post-card";
 import SessionControl from "@/components/features/auth/session-control";
 import { BottomNavigation } from "@/components/ui/bottom-navigation";
@@ -38,9 +38,16 @@ type DiscoverExperienceProps = {
   data: DiscoveryData;
 };
 
-const categoryFilters = ["For you", ...BUSINESS_CATEGORIES.map((category) => BUSINESS_CATEGORY_LABELS[category])];
-const mediaFilters = ["All", "Food", "Stores", "Services"] as const;
-type MediaFilter = (typeof mediaFilters)[number];
+const categoryFilters = ["All", "Food", "Furniture", "Electronics", "Cloths"] as const;
+type CategoryFilter = (typeof categoryFilters)[number];
+
+function categoryMatches(filter: CategoryFilter, category: keyof typeof BUSINESS_CATEGORY_LABELS) {
+  if (filter === "All") return true;
+  if (filter === "Food") return category === "RESTAURANT";
+  if (filter === "Furniture") return category === "FURNITURE";
+  if (filter === "Electronics") return category === "ELECTRONICS";
+  return false;
+}
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -56,8 +63,7 @@ function shopForPost(post: FeedPost, shops: Shop[]) {
 
 export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
   const router = useRouter();
-  const [activeCategory, setActiveCategory] = useState("For you");
-  const [activeMediaFilter, setActiveMediaFilter] = useState<MediaFilter>("All");
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>("All");
   const [activeTab, setActiveTab] = useState("For you");
   const [following, setFollowing] = useState<string[]>(() => data.shops.filter((shop) => shop.followed).map((shop) => shop.id));
   const [purchases, setPurchases] = useState(data.purchases);
@@ -89,7 +95,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
 
   const filteredShops = useMemo(() => {
     const matchingShops = data.shops.filter((shop) => {
-      const matchesCategory = activeCategory === "For you" || BUSINESS_CATEGORY_LABELS[shop.category] === activeCategory;
+      const matchesCategory = categoryMatches(activeCategory, shop.category);
       return matchesCategory;
     });
     return showAllShops ? matchingShops : matchingShops.slice(0, 3);
@@ -99,17 +105,11 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
     return data.posts.filter((post) => {
       const shop = shopForPost(post, data.shops);
       const matchesCategory =
-        activeCategory === "For you" ||
-        BUSINESS_CATEGORY_LABELS[shop.category] === activeCategory;
-      const matchesMedia =
-        activeMediaFilter === "All" ||
-        activeMediaFilter === "Food" && shop.category === "RESTAURANT" ||
-        activeMediaFilter === "Stores" && shop.category !== "RESTAURANT" ||
-        activeMediaFilter === "Services";
+        categoryMatches(activeCategory, shop.category);
       const matchesFollowing = activeTab !== "Following" || following.includes(shop.id);
-      return matchesCategory && matchesMedia && matchesFollowing;
+      return matchesCategory && matchesFollowing;
     });
-  }, [activeCategory, activeMediaFilter, activeTab, data.posts, data.shops, following]);
+  }, [activeCategory, activeTab, data.posts, data.shops, following]);
 
   async function toggleInteraction(action: "like" | "save" | "follow", id: string) {
     setInteractionError("");
@@ -164,7 +164,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
         </button>
         <nav aria-label="Desktop navigation" className="desktop-nav">
           <Link href="/search">Search</Link>
-          <Link href="/reels">Reels</Link>
+          <Link href="/reels">Videos</Link>
           <Link href="/saved">Saved</Link>
           <Link className="desktop-nav-ai" href="/ai"><Sparkles size={13} /> AI</Link>
         </nav>
@@ -190,7 +190,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
             {[
               { label: "For you", icon: Home },
               { label: "Explore", icon: Compass, route: "/search" },
-              { label: "Reels", icon: Clapperboard, route: "/reels" },
+              { label: "Videos", icon: Clapperboard, route: "/reels" },
               { label: "Saved", icon: Bookmark, route: "/saved" },
               { label: "ZIDDU AI", icon: Sparkles, route: "/ai" },
               { label: "Profile", icon: UserRound, route: "/profile" },
@@ -241,9 +241,6 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
 
             <section className="feed-section">
 
-              <div aria-label="Filter home feed" className="media-filter-tabs home-filter-tabs" role="tablist">
-                {mediaFilters.map((filter) => <button aria-selected={activeMediaFilter === filter} className={`media-filter-tab ${activeMediaFilter === filter ? "selected" : ""}`} key={filter} onClick={() => setActiveMediaFilter(filter)} role="tab" type="button">{filter}</button>)}
-              </div>
               <div className="category-tabs" role="tablist" aria-label="Filter discoveries">
                 {categoryFilters.map((category) => <button aria-selected={activeCategory === category} className={`category-tab ${activeCategory === category ? "selected" : ""}`} key={category} onClick={() => setActiveCategory(category)} role="tab" type="button">{category}</button>)}
               </div>
@@ -270,7 +267,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
                   );
                 })}
               </div>
-              <button className="load-more" type="button" onClick={() => setActiveCategory("For you")}>You&apos;re all caught up <span>✳</span></button>
+              <button className="load-more" type="button" onClick={() => setActiveCategory("All")}>You&apos;re all caught up <span>✳</span></button>
             </section>
           </>}
         </main>

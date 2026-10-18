@@ -5,16 +5,16 @@ import { Bookmark, Clapperboard, Home, Search, Sparkles, type LucideIcon } from 
 import { usePathname, useRouter } from "next/navigation";
 
 type NavigationItem = { label: string; icon: LucideIcon; active?: boolean; onClick?: () => void };
-type MainTab = "Home" | "Search" | "Reels" | "Saved";
+type MainTab = "Home" | "Search" | "Videos" | "Saved";
 
 const lastTabStorageKey = "ziddu:last-bottom-tab";
-const tabRoutes: Record<MainTab, string> = { Home: "/", Search: "/search", Reels: "/reels", Saved: "/saved" };
+const tabRoutes: Record<MainTab, string> = { Home: "/", Search: "/search", Videos: "/reels", Saved: "/saved" };
 const bottomNavigationRoutes = new Set(["/", "/search", "/saved", "/ai"]);
 
 const defaultItems: NavigationItem[] = [
   { label: "Home", icon: Home },
   { label: "Search", icon: Search },
-  { label: "Reels", icon: Clapperboard },
+  { label: "Videos", icon: Clapperboard },
   { label: "Saved", icon: Bookmark },
 ];
 const AppNavigationContext = createContext(false);
@@ -30,7 +30,7 @@ export function BottomNavigation({ items = defaultItems, global = false, showPro
       ...item,
       active: item.label === "Home" && pathname === "/" ||
         item.label === "Search" && pathname.startsWith("/search") ||
-        item.label === "Reels" && pathname.startsWith("/reels") ||
+        item.label === "Videos" && pathname.startsWith("/reels") ||
         item.label === "Saved" && pathname.startsWith("/saved"),
       onClick: () => {
         const tab = item.label as MainTab;
@@ -51,8 +51,8 @@ export function BottomNavigation({ items = defaultItems, global = false, showPro
           <stop offset="100%" stopColor="#884df2" />
         </linearGradient>
         <linearGradient id="navigation-fill" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity=".99" />
-          <stop offset="100%" stopColor="#f7fbff" stopOpacity=".99" />
+          <stop offset="0%" stopColor="var(--bottom-nav-surface-start)" stopOpacity=".99" />
+          <stop offset="100%" stopColor="var(--bottom-nav-surface-end)" stopOpacity=".99" />
         </linearGradient>
       </defs>
       <path d="M0 38 Q0 18 24 18 H132 C164 18 166 0 200 0 C234 0 236 18 268 18 H376 Q400 18 400 42 V112 H0 Z" fill="url(#navigation-fill)" stroke="url(#navigation-outline)" strokeWidth="1.5" />
@@ -65,7 +65,7 @@ export function AppNavigation({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const restoredInitialTab = useRef(false);
-  const showNavigation = bottomNavigationRoutes.has(pathname);
+  const showNavigation = bottomNavigationRoutes.has(pathname) || pathname.startsWith("/shops/");
 
   useEffect(() => {
     if (restoredInitialTab.current) return;

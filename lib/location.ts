@@ -38,12 +38,13 @@ export function normalizeProviderResult(result: { display_name?: unknown; lat?: 
     const address = result.address ?? {};
     const latitude = Number(result.lat);
     const longitude = Number(result.lon);
+    const postcode = text(address.postcode);
     return normalizedLocationSchema.parse({
         address: text(result.display_name),
-        locality: text(address.suburb) ?? text(address.neighbourhood) ?? text(address.village),
-        city: text(address.city) ?? text(address.town) ?? text(address.municipality),
+        locality: text(address.suburb) ?? text(address.neighbourhood) ?? text(address.village) ?? text(address.quarter),
+        city: text(address.city) ?? text(address.town) ?? text(address.municipality) ?? text(address.city_district) ?? text(address.county),
         state: text(address.state),
-        pincode: text(address.postcode),
+        pincode: postcode && /^[1-9]\d{5}$/.test(postcode) ? postcode : undefined,
         country: text(address.country),
         latitude: Number.isFinite(latitude) ? latitude : undefined,
         longitude: Number.isFinite(longitude) ? longitude : undefined,

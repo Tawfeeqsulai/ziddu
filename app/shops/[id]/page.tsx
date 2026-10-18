@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ShopProfileExperience from "@/components/features/shop/shop-profile-experience";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getShopProfile } from "@/services/shop-profile.service";
+import { getPurchaseHistory } from "@/services/purchase-history.service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,6 +20,8 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
   const user = await getCurrentUser();
   const profile = await getShopProfile(id, user?.id);
   if (!profile) notFound();
+  const history = user ? await getPurchaseHistory(user.id) : undefined;
+  const orders = history?.all.records.filter((record) => record.vendorId === id) ?? [];
 
-  return <ShopProfileExperience key={id} profile={profile} authenticated={Boolean(user)} />;
+  return <ShopProfileExperience key={id} orders={orders} profile={profile} authenticated={Boolean(user)} />;
 }

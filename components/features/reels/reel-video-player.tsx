@@ -7,11 +7,11 @@ import { useEffect, useRef, useState } from "react";
 let activeVideo: HTMLVideoElement | null = null;
 const soundPreferenceKey = "ziddu-reel-sound";
 
-type ReelVideoPlayerProps = { src: string; poster: string; alt: string; onError: () => void };
+type ReelVideoPlayerProps = { src: string; poster: string; alt: string; onError: () => void; onDoubleClick?: () => void };
 
-export default function ReelVideoPlayer({ src, poster, alt, onError }: ReelVideoPlayerProps) {
+export default function ReelVideoPlayer({ src, poster, alt, onError, onDoubleClick }: ReelVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [muted, setMuted] = useState(() => typeof window === "undefined" || window.sessionStorage.getItem(soundPreferenceKey) !== "on");
+  const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<"play" | "pause" | null>(null);
@@ -19,6 +19,11 @@ export default function ReelVideoPlayer({ src, poster, alt, onError }: ReelVideo
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    const savedSound = window.sessionStorage.getItem(soundPreferenceKey);
+    const soundSyncTimer = savedSound === "on" ? window.setTimeout(() => {
+      setMuted(false);
+      video.muted = false;
+    }, 0) : null;
     const pauseOtherVideos = () => {
       if (activeVideo && activeVideo !== video) activeVideo.pause();
       activeVideo = video;
@@ -34,6 +39,7 @@ export default function ReelVideoPlayer({ src, poster, alt, onError }: ReelVideo
     }, { threshold: 0.7 });
     observer.observe(video);
     return () => {
+      if (soundSyncTimer !== null) window.clearTimeout(soundSyncTimer);
       observer.disconnect();
       if (activeVideo === video) activeVideo = null;
     };
@@ -65,7 +71,7 @@ export default function ReelVideoPlayer({ src, poster, alt, onError }: ReelVideo
     window.sessionStorage.setItem(soundPreferenceKey, nextMuted ? "off" : "on");
   }
 
-  return <div className="reel-video-player" onClick={togglePlayback} onKeyDown={(event) => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); togglePlayback(); } }} role="button" tabIndex={0}>
+  return <div className="reel-video-player" onClick={togglePlayback} onDoubleClick={(event) => { event.preventDefault(); onDoubleClick?.(); }} onKeyDown={(event) => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); togglePlayback(); } }} role="button" tabIndex={0}>
     <Image alt="" className="reel-player-poster" fill priority={false} sizes="(max-width: 620px) 100vw, 520px" src={poster} unoptimized />
     <video aria-label={alt} controls={false} loop muted={muted} onCanPlay={() => setLoading(false)} onError={onError} playsInline poster={poster} preload="metadata" ref={videoRef} src={src} />
     {loading && <span aria-live="polite" className="reel-video-loading">Loading Reel...</span>}

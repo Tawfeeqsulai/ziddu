@@ -19,7 +19,7 @@ const slides = [
         eyebrow: "DISCOVER REAL PEOPLE.",
         title: <>Real businesses.<br />Real stories.</>,
         mobileTitle: <>Discover<br />real people.<br />Real businesses.</>,
-        description: "Follow your favourite shops, watch Reels, get offers and meet the people behind the places.",
+        description: "Follow your favourite shops, watch videos, get offers and meet the people behind the places.",
         icon: Store,
         note: "Made for your neighbourhood.",
     },

@@ -39,6 +39,21 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
   const safePage = Math.max(1, Math.min(page, 20));
   const skip = (safePage - 1) * REELS_PAGE_SIZE;
   try {
+    const sharedData = await getDiscoveryData(userId);
+    const sharedReels = sharedData.posts
+      .filter((post) => post.mediaType === "video" || post.kind === "reel")
+      .map((post) => {
+        const shop = sharedData.shops.find((item) => item.id === post.shopId);
+        return shop ? { post, shop, followed: Boolean(shop.followed) } : null;
+      })
+      .filter((item): item is ReelItem => item !== null);
+    if (sharedReels.length > 0) {
+      const selected = postId ? sharedReels.find((item) => item.post.id === postId) : undefined;
+      const ordered = selected ? [selected, ...sharedReels.filter((item) => item.post.id !== postId)] : sharedReels;
+      const items = ordered.slice(skip, skip + REELS_PAGE_SIZE);
+      return { reels: items, hasMore: skip + REELS_PAGE_SIZE < ordered.length };
+    }
+
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { city: true } });
     const now = new Date();
     const baseWhere = {

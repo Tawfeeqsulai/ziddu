@@ -73,7 +73,7 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
     setLoadingMore(true);
     try {
       const response = await fetch(`/api/reels?page=${page + 1}`);
-      if (!response.ok) throw new Error("Unable to load more Reels");
+      if (!response.ok) throw new Error("Unable to load more Videos");
       const result = await response.json() as ReelsResult;
       setItems((current) => [...current, ...result.reels]);
       setPage((current) => current + 1);
@@ -85,21 +85,21 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
     }
   }
 
-  if (error && items.length === 0) return <main className="reels-page"><ErrorState description="Please try again in a moment." onAction={() => window.location.reload()} title="Couldn't load Reels" /></main>;
-  if (items.length === 0) return <main className="reels-page"><EmptyState description="Check back later for new videos from local businesses." title="No Reels nearby yet" /></main>;
+  if (error && items.length === 0) return <main className="reels-page"><ErrorState description="Please try again in a moment." onAction={() => window.location.reload()} title="Couldn't load Videos" /></main>;
+  if (items.length === 0) return <main className="reels-page"><EmptyState description="Check back later for new videos from local businesses." title="No Videos nearby yet" /></main>;
 
   return <main className="reels-page">
-    <header className="reels-topbar"><BackButton label="Go back" /><span><span className="section-kicker">ZIDDU VIDEO</span><strong>Reels</strong></span><span className="reels-key-hint"><ArrowUp size={13} /><ArrowDown size={13} /></span></header>
+    <header className="reels-topbar"><BackButton label="Go back" /><span><span className="section-kicker">ZIDDU VIDEO</span><strong>Videos</strong></span><span className="reels-key-hint"><ArrowUp size={13} /><ArrowDown size={13} /></span></header>
     <div className="reels-scroll" onScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight > element.scrollHeight - element.clientHeight * 1.5) void loadMore(); }}>
-      {items.map(({ post, shop }) => <article className="reel-surface" key={post.id}>
+      {items.map(({ post, shop }) => <article className="reel-surface" key={post.id} onDoubleClick={(event) => { if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLAnchorElement) return; void interact("like", post.id); }}>
         {failedVideos.includes(post.id) ? <div className="reel-video-failure"><span>Unable to load this Reel</span><small>{shop.name} · {shop.area}, {shop.city}</small></div> : <ReelVideoPlayer alt={post.imageAlt} onError={() => setFailedVideos((current) => [...current, post.id])} poster={post.image} src={post.mediaUrl ?? post.image} />}
         <div className="reels-scrim" aria-hidden="true" />
         {post.price !== undefined && <div className="reels-offer reels-offer-top"><strong>{post.badge ?? "Local offer"}</strong><b>{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(post.price)}</b></div>}
-        <div className="reels-actions"><SocialActions accessibleName={`Reel from ${shop.name}`} liked={liked.includes(post.id)} onLike={() => { void interact("like", post.id); }} onSave={() => { void interact("save", post.id); }} onShare={() => { void share(post.id, post.title); }} saved={saved.includes(post.id)} overlay /><DirectionsButton className="reels-location" compact label={`${shop.area}, ${shop.city}`} shop={shop} /></div>
+        <div className="reels-actions"><SocialActions accessibleName={`Video from ${shop.name}`} liked={liked.includes(post.id)} onLike={() => { void interact("like", post.id); }} onSave={() => { void interact("save", post.id); }} onShare={() => { void share(post.id, post.title); }} saved={saved.includes(post.id)} overlay /><DirectionsButton className="reels-location" compact label={`${shop.area}, ${shop.city}`} shop={shop} /></div>
         <div className="reels-info"><div className="reels-business"><Link aria-label={`Open ${shop.name}`} href={`/shops/${shop.id}`}><span className="reels-avatar">{shop.initials}</span><strong>{shop.name}</strong></Link><button className={followed.includes(shop.id) ? "is-following" : ""} onClick={() => { void interact("follow", shop.id); }} type="button">{followed.includes(shop.id) ? <><Check size={13} /> Following</> : "Follow"}</button></div><h2>{post.title}</h2><p>{post.description}</p></div>
       </article>)}
-      {loadingMore && <div className="reels-loading-more">Loading more Reels...</div>}
+      {loadingMore && <div className="reels-loading-more">Loading more Videos...</div>}
     </div>
-    {interactionError && <p aria-live="polite" className="share-feedback" role="alert">{interactionError}</p>}<BottomNavigation items={[{ label: "Home", icon: Home, onClick: () => router.push("/") }, { label: "Discover", icon: Compass, onClick: () => router.push("/search") }, { label: "Reels", icon: Clapperboard, active: true }, { label: "Profile", icon: UserRound, onClick: () => router.push("/profile") }]} />
+    {interactionError && <p aria-live="polite" className="share-feedback" role="alert">{interactionError}</p>}<BottomNavigation items={[{ label: "Home", icon: Home, onClick: () => router.push("/") }, { label: "Discover", icon: Compass, onClick: () => router.push("/search") }, { label: "Videos", icon: Clapperboard, active: true }, { label: "Profile", icon: UserRound, onClick: () => router.push("/profile") }]} />
   </main>;
 }

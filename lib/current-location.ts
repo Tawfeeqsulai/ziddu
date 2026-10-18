@@ -25,7 +25,7 @@ export async function getCurrentLocation() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => resolve({ latitude: coords.latitude, longitude: coords.longitude }),
       (error) => reject(new Error(geolocationError(error))),
-      { enableHighAccuracy: false, maximumAge: 120_000, timeout: 10_000 },
+      { enableHighAccuracy: true, maximumAge: 300_000, timeout: 15_000 },
     );
   });
 
@@ -33,10 +33,12 @@ export async function getCurrentLocation() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(coordinates),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
   });
-  const result = reverseGeocodeResponseSchema.safeParse(await response.json());
+  const result = reverseGeocodeResponseSchema.safeParse(await response.json().catch(() => null));
   if (!response.ok) {
-    throw new Error(result.success ? result.data.message ?? "Location lookup is unavailable." : "Location lookup is unavailable.");
+    throw new Error(result.success ? result.data.message ?? "Location lookup is unavailable." : "Location lookup is unavailable. Try again or enter your area manually.");
   }
   if (!result.success || !result.data.location) {
     throw new Error("We couldn't identify your area. Enter your location manually.");

@@ -1,13 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Check,
   MapPin,
   Navigation,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -55,6 +57,7 @@ export function ShopAvatar({ shop, size = 42 }: { shop: Shop; size?: number }) {
 }
 
 export function ShopInfo({ shop }: { shop: Shop }) {
+  const locationText = shop.address || [shop.area, shop.city].filter(Boolean).join(", ") || shop.distance;
   return (
     <Link className="post-shop-identity" href={`/shops/${shop.id}`}>
       <ShopAvatar shop={shop} />
@@ -62,6 +65,7 @@ export function ShopInfo({ shop }: { shop: Shop }) {
         <strong>{shop.name}</strong>
         <span className="post-shop-location">
           <MapPin size={12} />
+          <span className="post-location-preview">{locationText} · {shop.distance}</span>
           <span className="post-location-text">{shop.area}, {shop.city} · {shop.distance}</span>
           <i className={`open-status-dot ${shop.status === "Closed" ? "is-closed" : ""}`} />
           <span className="post-open-status">{shop.status}</span>
@@ -72,7 +76,8 @@ export function ShopInfo({ shop }: { shop: Shop }) {
 }
 
 export function LocationInfo({ shop, overlay = false }: { shop: Shop; overlay?: boolean }) {
-  return <DirectionsButton className={`${overlay ? "reel-location" : ""} social-location`} compact={overlay} label={overlay ? "Location" : `${shop.area}, ${shop.city}`} shop={shop} />;
+  const locationText = shop.address || [shop.area, shop.city].filter(Boolean).join(", ") || shop.distance;
+  return <DirectionsButton className={`${overlay ? "reel-location" : ""} social-location`} compact={overlay} label={overlay ? "Location" : locationText} shop={shop} />;
 }
 
 export function PostHeader({ shop, followed, onFollow }: PostCoreProps) {
@@ -148,8 +153,7 @@ export function ImagePost(props: PostPresentationProps) {
   );
 }
 
-function ReelVideo({ post }: { post: FeedPost }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+function ReelVideo({ post, muted, videoRef }: { post: FeedPost; muted: boolean; videoRef: React.RefObject<HTMLVideoElement | null> }) {
 
   useEffect(() => {
     const video = videoRef.current;
@@ -160,18 +164,29 @@ function ReelVideo({ post }: { post: FeedPost }) {
     }, { threshold: 0.55 });
     observer.observe(video);
     return () => observer.disconnect();
-  }, []);
+  }, [videoRef]);
 
-  return <video aria-label={post.imageAlt} controls loop muted playsInline poster={post.image} preload="metadata" ref={videoRef}><source src={post.mediaUrl} type="video/mp4" /></video>;
+  return <video aria-label={post.imageAlt} controls loop muted={muted} playsInline poster={post.image} preload="metadata" ref={videoRef}><source src={post.mediaUrl} type="video/mp4" /></video>;
 }
 
 export function VideoPost(props: PostPresentationProps) {
   const { post, shop, followed, liked, saved, onFollow, onLike, onSave, onOpenShop, onCheckout, engagement } = props;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(true);
+
+  function toggleSound(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    const nextMuted = !muted;
+    setMuted(nextMuted);
+    if (videoRef.current) videoRef.current.muted = nextMuted;
+  }
+
   return (
     <PostContainer className="video-post" variant="reel">
-      <div className="reel-stage">
+      <div className="reel-stage" onDoubleClick={(event) => { if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLAnchorElement) return; onLike(); }}>
         <Image alt={post.imageAlt} className="reel-poster" fill loading="lazy" sizes="(max-width: 620px) 100vw, 420px" src={post.image} unoptimized />
-        {post.mediaUrl && <ReelVideo post={post} />}
+        {post.mediaUrl && <ReelVideo muted={muted} post={post} videoRef={videoRef} />}
+        <button aria-label={muted ? "Unmute video" : "Mute video"} className="reel-sound-button" onClick={toggleSound} type="button">{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
         <div aria-hidden="true" className="reel-readability-shade" />
         <OfferInfo onCheckout={onCheckout} overlay post={post} />
         <PostActions

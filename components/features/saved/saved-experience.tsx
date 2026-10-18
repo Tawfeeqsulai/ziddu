@@ -52,10 +52,10 @@ export default function SavedExperience({ initial }: SavedExperienceProps) {
             <Bookmark aria-hidden="true" className="saved-heading-icon" size={22} />
         </header>
         <nav aria-label="Filter saved items" className="saved-tabs" role="tablist">
-            {([["all", "All", Bookmark], ["posts", "Posts", ImageIcon], ["reels", "Reels", Clapperboard]] as const).map(([value, label, Icon]) => <button aria-selected={filter === value} className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)} role="tab" type="button"><Icon size={15} />{label}</button>)}
+            {([["all", "All", Bookmark], ["posts", "Posts", ImageIcon], ["reels", "Videos", Clapperboard]] as const).map(([value, label, Icon]) => <button aria-selected={filter === value} className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)} role="tab" type="button"><Icon size={15} />{label}</button>)}
         </nav>
         {error && <p aria-live="polite" className="saved-error" role="alert">{error}</p>}
-        {visiblePosts.length === 0 ? <EmptyState description={posts.length ? "There are no saved items in this section." : "Posts and Reels you save will appear here."} title={posts.length ? "Nothing in this filter" : "Nothing saved yet"} actionLabel="Explore nearby" onAction={() => router.push("/search")} /> : <section aria-label="Saved posts and Reels" className="saved-posts">{visiblePosts.map((post) => {
+        {visiblePosts.length === 0 ? <EmptyState description={posts.length ? "There are no saved items in this section." : "Posts and Videos you save will appear here."} title={posts.length ? "Nothing in this filter" : "Nothing saved yet"} actionLabel="Explore nearby" onAction={() => router.push("/search")} /> : <section aria-label="Saved posts and Videos" className="saved-posts">{visiblePosts.map((post) => {
             const shop = shopForPost(post);
             return <PostCard key={post.id} followed={followed.includes(shop.id)} liked={liked.includes(post.id)} onCheckout={() => router.push(`/shops/${shop.id}`)} onFollow={() => { void interact("follow", shop.id); }} onLike={() => { void interact("like", post.id); }} onOpenShop={() => router.push(`/shops/${shop.id}`)} onSave={() => { void interact("save", post.id); }} post={post} saved={true} shop={shop} />;
         })}</section>}

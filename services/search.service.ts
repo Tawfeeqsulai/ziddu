@@ -38,6 +38,20 @@ function offerValue(value: unknown) {
   return value as { priceInr?: number; originalPriceInr?: number; badge?: string };
 }
 
+function sharedSearchResults(data: Awaited<ReturnType<typeof getDiscoveryData>>, query: string, category: BusinessCategory | "ALL", city: string): SearchResults {
+  const normalizedQuery = query.toLowerCase();
+  const posts = data.posts.filter((post) => {
+    const shop = data.shops.find((item) => item.id === post.shopId);
+    if (!shop || (category !== "ALL" && shop.category !== category)) return false;
+    return !normalizedQuery || `${post.title} ${post.description} ${post.hashtags.join(" ")} ${shop.name}`.toLowerCase().includes(normalizedQuery);
+  });
+  const shops = data.shops.filter((shop) => {
+    if (category !== "ALL" && shop.category !== category) return false;
+    return !normalizedQuery || `${shop.name} ${shop.category} ${shop.handle} ${shop.area} ${shop.city}`.toLowerCase().includes(normalizedQuery) || posts.some((post) => post.shopId === shop.id);
+  });
+  return { query, category, city, locality: "", shops, posts, offers: [], products: [], hasMore: false };
+}
+
 export async function searchDiscovery(params: SearchParams, userLocation?: { city?: string | null; locality?: string | null; latitude?: number | null; longitude?: number | null }, userId?: string): Promise<SearchResults> {
   const query = normalized(params.query, 80);
   const category = categoryValue(params.category);
@@ -112,12 +126,13 @@ export async function searchDiscovery(params: SearchParams, userLocation?: { cit
     if (nearbyShops.length === 0 && posts.length === 0 && offers.length === 0 && products.length === 0 && city && !requestedCity) {
       return searchDiscovery({ ...params, city: undefined }, undefined, userId);
     }
+    if (nearbyShops.length === 0 && posts.length === 0 && offers.length === 0 && products.length === 0) {
+      const sharedResults = sharedSearchResults(await getDiscoveryData(userId ?? ""), query, category, city);
+      if (sharedResults.shops.length > 0 || sharedResults.posts.length > 0) return sharedResults;
+    }
     return { query, category, city, locality, shops: [...resultShops.values()].slice(0, SEARCH_LIMIT), posts, offers, products, hasMore: nearbyShops.length === SEARCH_LIMIT || postRecords.length === SEARCH_LIMIT || productRecords.length === SEARCH_LIMIT };
   } catch {
     const fallback = await getDiscoveryData(userId ?? "");
-    const normalizedQuery = query.toLowerCase();
-    const posts = fallback.posts.filter((post) => !normalizedQuery || `${post.title} ${post.description} ${post.hashtags.join(" ")}`.toLowerCase().includes(normalizedQuery));
-    const shops = fallback.shops.filter((shop) => !normalizedQuery || `${shop.name} ${shop.category} ${shop.handle} ${shop.area} ${shop.city}`.toLowerCase().includes(normalizedQuery) || posts.some((post) => post.shopId === shop.id));
-    return { query, category, city, locality, shops, posts, offers: [], products: [], hasMore: false };
+    return sharedSearchResults(fallback, query, category, city);
   }
 }

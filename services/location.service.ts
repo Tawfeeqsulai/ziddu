@@ -12,7 +12,7 @@ class NominatimProvider implements LocationProvider {
     private readonly baseUrl = process.env.LOCATION_API_URL ?? "https://nominatim.openstreetmap.org";
 
     private async request(path: string) {
-        const response = await fetch(`${this.baseUrl}${path}`, { headers: { Accept: "application/json", "User-Agent": "ZIDDU local discovery app" }, signal: AbortSignal.timeout(7000) });
+        const response = await fetch(`${this.baseUrl}${path}`, { headers: { Accept: "application/json", "Accept-Language": "en-IN,en;q=0.8", "User-Agent": "ZIDDU local discovery app" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
         if (!response.ok) throw new Error("Location provider unavailable");
         return response.json() as Promise<NominatimResult | NominatimResult[]>;
     }
