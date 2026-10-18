@@ -24,7 +24,11 @@ class NominatimProvider implements LocationProvider {
 
     async reverseGeocode(latitude: number, longitude: number) {
         const result = await this.request(`/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${latitude}&lon=${longitude}`);
-        try { return Array.isArray(result) ? null : normalizeProviderResult(result); } catch { return null; }
+        try {
+            if (Array.isArray(result)) return null;
+            const location = normalizeProviderResult(result);
+            return { ...location, latitude, longitude };
+        } catch { return null; }
     }
 }
 

@@ -12,6 +12,20 @@ const billingSchema = z.object({
   items: z.array(z.object({ itemId: z.coerce.number().int().positive(), quantity: z.coerce.number().int().positive().max(100) })).min(1),
 });
 
+function responseBillId(value: unknown): number | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["bill_id", "billId", "id"]) {
+    const id = Number(record[key]);
+    if (Number.isInteger(id) && id > 0) return id;
+  }
+  for (const key of ["billing", "data", "bill", "result"]) {
+    const nested = responseBillId(record[key]);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Sign in required." }, { status: 401 });
@@ -50,6 +64,8 @@ export async function POST(request: Request) {
   const payload = { vendor_id: vendor.id, end_user_id: endUser.id, products, total_price: totalPrice };
 
   try {
+    // The shared table stores timestamps to whole seconds.
+    const requestedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
     const response = await fetch(BILLING_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -58,7 +74,22 @@ export async function POST(request: Request) {
     });
     const responseBody = await response.json().catch(() => null);
     if (!response.ok) return NextResponse.json({ message: responseBody?.message ?? "The billing service rejected this order." }, { status: 502 });
-    return NextResponse.json({ billing: responseBody, payload }, { status: response.status || 201 });
+    // The legacy endpoint does not return a consistent response shape. Prefer
+    // its bill id, then find the bill it just wrote so the customer can append
+    // items to this same bill from the confirmation screen.
+    let billId = responseBillId(responseBody);
+    if (!billId) {
+      try {
+        billId = (await sharedPrisma.sharedBill.findFirst({
+          where: { vendorId: vendor.id, endUserId: endUser.id, createdAt: { gte: requestedAt } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { id: true },
+        }))?.id;
+      } catch {
+        // The vendor API may accept an order while the shared DB is unreachable.
+      }
+    }
+    return NextResponse.json({ billing: responseBody, billId: billId ? String(billId) : undefined, payload }, { status: response.status || 201 });
   } catch {
     return NextResponse.json({ message: "The billing service is unavailable. Please try again." }, { status: 502 });
   }

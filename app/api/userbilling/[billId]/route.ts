@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ bi
 
   const bill = await sharedPrisma.sharedBill.findFirst({ where: { id: billId, endUserId: orderingUser.id, vendorId: parsed.data.vendorId } });
   if (!bill) return NextResponse.json({ message: "Order not found." }, { status: 404 });
-  if (["completed", "cancelled", "rejected", "ready"].includes(bill.paymentStatus.toLowerCase())) return NextResponse.json({ message: "This order can no longer be changed." }, { status: 409 });
+  if (["paid", "success", "completed", "cancelled", "rejected", "ready"].includes(bill.paymentStatus.toLowerCase())) return NextResponse.json({ message: "This order can no longer be changed." }, { status: 409 });
 
   const current = bill.products && typeof bill.products === "object" && !Array.isArray(bill.products) ? bill.products as BillPayload : { products: Array.isArray(bill.products) ? bill.products as BillProduct[] : [] };
   if ((current._updateRequestIds ?? []).includes(parsed.data.requestId)) return NextResponse.json({ billId: bill.id, total: Number(bill.totalPrice), duplicate: true });

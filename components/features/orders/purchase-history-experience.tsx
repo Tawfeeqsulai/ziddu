@@ -31,6 +31,7 @@ function isPaidStatus(status: string) {
 
 function HistoryCard({ purchase, expanded, onToggle }: { purchase: PurchaseHistoryRecord; expanded: boolean; onToggle: () => void }) {
   const paid = isPaidStatus(purchase.status);
+  const canUpdate = !paid && !["cancelled", "rejected", "ready"].includes(purchase.status.toLowerCase()) && purchase.vendorId !== "" && purchase.billId !== "Purchase";
   return <article className={`purchase-history-card${paid ? " is-paid" : ""}${expanded ? " is-expanded" : ""}`} onClick={onToggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onToggle(); } }} role="button" tabIndex={0}>
     <div className="purchase-history-card-top">
       <div className="purchase-history-shop-mark">{purchase.logoUrl ? <Image alt="" height={42} src={purchase.logoUrl} unoptimized width={42} /> : <ShoppingBag aria-hidden="true" size={19} />}</div>
@@ -40,6 +41,7 @@ function HistoryCard({ purchase, expanded, onToggle }: { purchase: PurchaseHisto
     <div className="purchase-history-products">{purchase.products.length ? purchase.products.map((product, index) => <div className="purchase-history-product" key={`${purchase.billId}-${product.itemId ?? index}`}><span>Item {product.itemId ?? "purchase"} <small>× {product.quantity}</small></span><strong>{money(product.total)}</strong></div>) : <div className="purchase-history-product"><span>Shop purchase</span><strong>{money(purchase.total)}</strong></div>}</div>
     {expanded && <div className="purchase-history-expanded"><strong>Order details</strong>{purchase.products.map((product, index) => <div key={`detail-${purchase.billId}-${product.itemId ?? index}`}><span>{product.itemName ?? `Item ${product.itemId ?? "purchase"}`} · {money(product.price)} each × {product.quantity}</span><b>{money(product.total)}</b></div>)}<span>Status: {purchase.status}</span><span>Address: {purchase.address}</span></div>}
     <div className="purchase-history-total"><span>{paid ? "Paid" : "Payment pending"}</span><strong>{money(purchase.total)}</strong></div>
+    {canUpdate && <Link className="purchase-history-add-more" href={`/shops/${encodeURIComponent(purchase.vendorId)}?order=${encodeURIComponent(purchase.billId)}`} onClick={(event) => event.stopPropagation()}>Add More Items</Link>}
   </article>;
 }
 

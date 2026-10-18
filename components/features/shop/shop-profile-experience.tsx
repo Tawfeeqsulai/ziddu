@@ -17,7 +17,7 @@ import type { ShopProfile } from "@/services/shop-profile.service";
 import type { PurchaseHistoryRecord } from "@/services/purchase-history.service";
 import MenuOrderExperience from "@/components/features/shop/menu-order-experience";
 
-type ShopProfileExperienceProps = { profile: ShopProfile; authenticated: boolean; orders: PurchaseHistoryRecord[] };
+type ShopProfileExperienceProps = { profile: ShopProfile; authenticated: boolean; orders: PurchaseHistoryRecord[]; initialOrderId?: string };
 type PostFilter = "All" | "Posts" | "Videos";
 type ShopSection = "about" | "menu" | "offers" | "orders" | "posts";
 
@@ -29,33 +29,21 @@ function isPaidOrder(status: string) {
   return ["paid", "success", "completed"].includes(status.toLowerCase());
 }
 
-export default function ShopProfileExperience({ profile, authenticated, orders }: ShopProfileExperienceProps) {
+export default function ShopProfileExperience({ profile, authenticated, orders, initialOrderId }: ShopProfileExperienceProps) {
   const router = useRouter();
   const { followed, followerCount, updateFollowed } = useFollowSync(
     profile.shop.id,
     Boolean(profile.shop.followed),
     profile.shop.followerCount,
   );
-  const [activeSection, setActiveSection] = useState<ShopSection>("posts");
+  const [activeSection, setActiveSection] = useState<ShopSection>(initialOrderId ? "menu" : "posts");
   const [filter, setFilter] = useState<PostFilter>("All");
   const [liked, setLiked] = useState(() => profile.posts.filter((post) => post.liked).map((post) => post.id));
   const [saved, setSaved] = useState(() => profile.posts.filter((post) => post.saved).map((post) => post.id));
   const [interactionError, setInteractionError] = useState("");
   const [shareFeedback, setShareFeedback] = useState("");
   const [shopSaved, setShopSaved] = useState(false);
-  const [orderToUpdate, setOrderToUpdate] = useState<PurchaseHistoryRecord>();
-
-  useEffect(() => {
-    function selectOrder(event: MouseEvent) {
-      const target = event.target instanceof Element ? event.target.closest(".shop-order-add") : null;
-      if (!target) return;
-      const buttons = Array.from(document.querySelectorAll(".shop-order-add"));
-      const order = orders[buttons.indexOf(target)];
-      if (order) setOrderToUpdate(order);
-    }
-    document.addEventListener("click", selectOrder);
-    return () => document.removeEventListener("click", selectOrder);
-  }, [orders]);
+  const [orderToUpdate, setOrderToUpdate] = useState<PurchaseHistoryRecord | undefined>(() => orders.find((order) => order.billId === initialOrderId));
 
   useEffect(() => {
     if (activeSection !== "orders") return;
@@ -66,6 +54,7 @@ export default function ShopProfileExperience({ profile, authenticated, orders }
   }, [activeSection, orders, router]);
 
   const posts = profile.posts.filter((post) => filter === "All" || filter === "Posts" && post.mediaType === "image" || filter === "Videos" && post.mediaType === "video");
+  const offerPosts = profile.posts.filter((post) => post.kind === "offer");
   const orderedOrders = [...orders.filter((order) => !isPaidOrder(order.status)), ...orders.filter((order) => isPaidOrder(order.status))];
 
   async function interact(action: "follow" | "like" | "save", id: string) {
@@ -132,9 +121,9 @@ export default function ShopProfileExperience({ profile, authenticated, orders }
       <nav className="shop-profile-tabs" aria-label="Shop profile sections" role="tablist">{([["posts", `Posts · ${profile.posts.length}`], ["offers", `Offers${profile.offers.length ? ` · ${profile.offers.length}` : ""}`], ["about", "About"], ["menu", profile.shop.category === "RESTAURANT" ? "Menu" : "Products"], ["orders", `Orders${orders.length ? ` · ${orders.length}` : ""}`]] as const).map(([value, label]) => <button aria-selected={activeSection === value} className={activeSection === value ? "is-active" : ""} key={value} onClick={() => setActiveSection(value)} role="tab" type="button">{label}</button>)}</nav>
       {activeSection === "posts" && <section className="shop-posts" aria-labelledby="shop-posts-title"><div className="shop-section-heading"><div><h2 id="shop-posts-title">Post</h2></div><span className="shop-post-count">{profile.posts.length}</span></div><div className="shop-post-tabs" role="tablist" aria-label="Filter shop posts">{(["All", "Poster", "Videos"] as PostFilter[]).map((item) => <button aria-selected={filter === item} className={filter === item ? "is-active" : ""} key={item} onClick={() => setFilter(item)} role="tab" type="button">{item}<ChevronDown size={12} /></button>)}</div>{posts.length === 0 ? <EmptyState description="This shop has not shared anything in this format yet." title="No posts yet" /> : <div className="shop-post-list">{posts.map((post: FeedPost) => <PostCard followed={followed} key={post.id} liked={liked.includes(post.id)} onCheckout={() => undefined} onFollow={() => { void interact("follow", profile.shop.id); }} onLike={() => { void interact("like", post.id); }} onOpenShop={() => undefined} onSave={() => { void interact("save", post.id); }} post={post} saved={saved.includes(post.id)} shop={shopForPost()} />)}</div>}</section>}
       {activeSection === "about" && <section className="shop-profile-about" aria-labelledby="shop-about-title"><div className="shop-section-heading"><div><span className="section-kicker">KNOW THE BUSINESS</span><h2 id="shop-about-title">About</h2></div></div><p>{profile.shop.description}</p><div className="shop-profile-details"><span><Tag size={15} />{BUSINESS_CATEGORY_LABELS[profile.shop.category]}{profile.shop.distanceLabel ? ` · ${profile.shop.distanceLabel}` : ""}</span><span><MapPin size={15} />{profile.shop.address}{profile.shop.pincode ? `, ${profile.shop.pincode}` : ""}</span>{profile.shop.phone && <a href={`tel:${profile.shop.phone.replace(/\s/g, "")}`}><Phone size={15} />{profile.shop.phone}</a>}<span><Clock3 size={15} />{profile.shop.businessHours ?? (profile.shop.workingDays.length > 0 ? `${profile.shop.workingDays.slice(0, 3).join(" · ")}${profile.shop.workingDays.length > 3 ? " · ..." : ""}` : "Hours not listed")}</span><span><span className={`shop-status-dot ${profile.shop.status === "Closed" ? "is-closed" : ""}`} />{profile.shop.status}</span></div><DirectionsButton className="shop-directions" label="Get directions" shop={profile.shop} /></section>}
-      {activeSection === "offers" && <section className="shop-offers" aria-labelledby="shop-offers-title"><div className="shop-section-heading"><div><span className="section-kicker">GOOD THINGS TO KNOW</span><h2 id="shop-offers-title">Offers from here</h2></div><Tag size={18} /></div>{profile.offers.length === 0 ? <p className="shop-compact-empty">No active offers right now.</p> : <div className="shop-offer-list">{profile.offers.map((offer) => <article className="shop-offer" key={offer.postId}><div><strong>{offer.badge ?? "Local offer"}</strong><span>{offer.title}</span>{offer.description && <small>{offer.description}</small>}{offer.validUntil && <small>Valid until {new Date(offer.validUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</small>}</div>{offer.price !== undefined && <b>{offer.originalPrice !== undefined && <del>{money(offer.originalPrice)} </del>}{money(offer.price)}</b>}</article>)}</div>}</section>}
+      {activeSection === "offers" && <section className="shop-offers" aria-labelledby="shop-offers-title"><div className="shop-section-heading"><div><span className="section-kicker">GOOD THINGS TO KNOW</span><h2 id="shop-offers-title">Offers from here</h2></div><Tag size={18} /></div>{offerPosts.length > 0 ? <div className="shop-post-list">{offerPosts.map((post) => <PostCard followed={followed} key={post.id} liked={liked.includes(post.id)} onCheckout={() => undefined} onFollow={() => { void interact("follow", profile.shop.id); }} onLike={() => { void interact("like", post.id); }} onOpenShop={() => undefined} onSave={() => { void interact("save", post.id); }} post={post} saved={saved.includes(post.id)} shop={shopForPost()} />)}</div> : profile.offers.length === 0 ? <p className="shop-compact-empty">No offers from this shop yet.</p> : <div className="shop-offer-list">{profile.offers.map((offer) => <article className="shop-offer" key={offer.postId}><div><strong>{offer.badge ?? "Local offer"}</strong><span>{offer.title}</span>{offer.description && <small>{offer.description}</small>}{offer.validUntil && <small>Valid until {new Date(offer.validUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</small>}</div>{offer.price !== undefined && <b>{offer.originalPrice !== undefined && <del>{money(offer.originalPrice)} </del>}{money(offer.price)}</b>}</article>)}</div>}</section>}
       {activeSection === "menu" && <MenuOrderExperience authenticated={authenticated} existingOrder={orderToUpdate} onClose={() => { setOrderToUpdate(undefined); setActiveSection("posts"); }} products={profile.products} shop={profile.shop} />}
-      {activeSection === "orders" && <section className="shop-orders" aria-labelledby="shop-orders-title"><div className="shop-section-heading"><div><h2 id="shop-orders-title">YOUR ORDERS</h2></div></div>{orders.length === 0 ? <EmptyState description="Orders from this shop will appear here." title="No orders yet" /> : <div className="shop-order-list">{orders.map((order) => <article className="shop-order-card" key={order.billId}><div className="shop-order-card-top"><strong>Order #{order.billId}</strong><span className={`shop-order-status is-${order.status}`}>{order.status}</span></div><div className="shop-order-items">{order.products.map((product, index) => <span key={`${order.billId}-${product.itemId ?? index}`}>{product.itemName ?? `Item ${product.itemId ?? "purchase"}`} × {product.quantity}</span>)}</div><div className="shop-order-card-bottom"><span>{order.date ? new Date(order.date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Date unavailable"}</span><strong>{money(order.total)}</strong></div><button className="shop-order-add" disabled={!authenticated || ["completed", "cancelled", "rejected", "ready"].includes(order.status)} onClick={() => setActiveSection("menu")} type="button">Add More Items</button></article>)}</div>}</section>}
+      {activeSection === "orders" && <section className="shop-orders" aria-labelledby="shop-orders-title"><div className="shop-section-heading"><div><h2 id="shop-orders-title">YOUR ORDERS</h2></div></div>{orders.length === 0 ? <EmptyState description="Orders from this shop will appear here." title="No orders yet" /> : <div className="shop-order-list">{orders.map((order) => { const canUpdate = !isPaidOrder(order.status) && !["cancelled", "rejected", "ready"].includes(order.status); return <article className="shop-order-card" key={order.billId}><div className="shop-order-card-top"><strong>Order #{order.billId}</strong><span className={`shop-order-status is-${order.status}`}>{order.status}</span></div><div className="shop-order-items">{order.products.map((product, index) => <span key={`${order.billId}-${product.itemId ?? index}`}>{product.itemName ?? `Item ${product.itemId ?? "purchase"}`} × {product.quantity}</span>)}</div><div className="shop-order-card-bottom"><span>{order.date ? new Date(order.date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Date unavailable"}</span><strong>{money(order.total)}</strong></div><button className="shop-order-add" disabled={!authenticated || !canUpdate} onClick={() => { setOrderToUpdate(order); setActiveSection("menu"); }} type="button">Add More Items</button></article>; })}</div>}</section>}
     </main>
   );
 }

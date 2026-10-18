@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db/prisma";
 import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
-import type { FeedPost, Shop } from "@/types/commerce";
+import { normalizeBusinessCategory, type FeedPost, type Shop } from "@/types/commerce";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
+import { normalizeVendorLocation } from "@/lib/vendor-location";
 
 type OfferValue = { priceInr?: number; originalPriceInr?: number; badge?: string };
 
@@ -43,13 +44,14 @@ async function getSharedShopProfile(id: string): Promise<ShopProfile | null> {
   if (!record) return null;
 
   const name = record.businessName?.trim() || `Vendor ${record.id}`;
-  const rawCategory = record.businessCategory?.toUpperCase();
-  const category = rawCategory === "RESTAURANT" || rawCategory === "FURNITURE" || rawCategory === "ELECTRONICS" ? rawCategory : "RESTAURANT";
+  const location = normalizeVendorLocation(record.address);
+  const category = normalizeBusinessCategory(record.businessCategory);
   const shop: Shop & { description: string; pincode?: string; followerCount: number; workingDays: string[]; distanceLabel: string } = {
-    id: String(record.id), name, handle: `vendor-${record.id}`, category, distance: "Nearby", area: "", city: "", state: "",
+    id: String(record.id), name, handle: `vendor-${record.id}`, category, distance: "Nearby", area: location.locality, city: location.city, state: "",
     status: record.status.toLowerCase() === "inactive" ? "Closed" : "Open now", rating: 0,
     initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(), image: record.logoUrl || "/ziddu-logo.png",
-    address: record.address || "", owner: "", phone: record.user.phoneNumber || undefined, description: "", followerCount: 0,
+    address: location.address, owner: "", phone: record.user.phoneNumber || undefined, description: "", followerCount: 0,
+    latitude: location.latitude, longitude: location.longitude,
     workingDays: readStringArray(record.workingDays), distanceLabel: "Nearby",
   };
   const posts: FeedPost[] = record.posts.map((post) => {
@@ -61,7 +63,7 @@ async function getSharedShopProfile(id: string): Promise<ShopProfile | null> {
       title, description: `${name} shared a new ${post.postCategory || "post"}.`, image: post.postUrl, imageAlt: title, likes: 0,
       publishedAt: (post.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? post.postUrl : undefined,
       hashtags: post.postCategory ? [`#${post.postCategory.replace(/\s+/g, "")}`] : [], price: values.priceInr,
-      originalPrice: values.originalPriceInr, badge: values.badge, liked: false, saved: false,
+      originalPrice: values.originalPriceInr, badge: values.badge, offerValidUntil: post.offer?.validityTo?.toISOString(), liked: false, saved: false,
     };
   });
   const offers: ShopOffer[] = record.offers.map((offer) => {
@@ -111,7 +113,6 @@ export async function getShopProfile(id: string, userId?: string): Promise<ShopP
   });
   if (!record) return null;
 
-    const now = new Date();
     const actualDistance = formatDistanceKm(haversineDistanceKm(viewer ?? {}, record.location));
     const distanceLabel = actualDistance
       ? `${actualDistance} away`
@@ -123,11 +124,10 @@ export async function getShopProfile(id: string, userId?: string): Promise<ShopP
     const posts = record.posts.map((post) => {
       const offer = getOfferValues(post.offer?.offerValue);
       const price = offer.priceInr ?? post.offer?.product?.priceInr;
-      const activeOffer = Boolean(post.offer && post.offer.validityFrom <= now && post.offer.validityTo >= now);
   return {
         id: post.id,
         shopId: record.id,
-        kind: post.isOfferIncluded && activeOffer ? "offer" as const : post.type === "VIDEO" ? "reel" as const : "post" as const,
+        kind: post.isOfferIncluded ? "offer" as const : post.type === "VIDEO" ? "reel" as const : "post" as const,
         title: post.title,
         description: post.description,
         image: post.thumbnailUrl ?? post.mediaUrl,
@@ -140,6 +140,7 @@ export async function getShopProfile(id: string, userId?: string): Promise<ShopP
         price,
         originalPrice: offer.originalPriceInr,
         badge: offer.badge,
+        offerValidUntil: post.offer?.validityTo.toISOString(),
         liked: Array.isArray(post.likes) && post.likes.length > 0,
         saved: Array.isArray(post.saves) && post.saves.length > 0,
       } satisfies FeedPost;

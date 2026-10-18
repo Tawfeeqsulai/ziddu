@@ -15,7 +15,8 @@ export default function PostCard(props: PostCardProps) {
   const [shareLabel, setShareLabel] = useState("");
 
   async function sharePost() {
-    const url = `${window.location.origin}/?post=${encodeURIComponent(post.id)}`;
+    const route = post.mediaType === "video" ? "/reels" : "/";
+    const url = `${window.location.origin}${route}?post=${encodeURIComponent(post.id)}`;
     const text = `Check out this ${post.mediaType === "video" ? "Reel" : "post"} from ${props.shop.name} in ${props.shop.area}, ${props.shop.city}.`;
     try {
       if (navigator.share) {

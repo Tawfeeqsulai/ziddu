@@ -5,18 +5,30 @@ export const BUSINESS_CATEGORIES = [
 ] as const;
 
 export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number];
+export type ShopCategory = BusinessCategory | "CLOTHS";
 
-export const BUSINESS_CATEGORY_LABELS: Record<BusinessCategory, string> = {
+export const BUSINESS_CATEGORY_LABELS: Record<ShopCategory, string> = {
   RESTAURANT: "Restaurants",
   FURNITURE: "Furniture",
   ELECTRONICS: "Electronics",
+  CLOTHS: "Cloths",
 };
+
+export function normalizeBusinessCategory(value: string | null | undefined): ShopCategory {
+  const category = value?.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (category === "FURNITURE") return "FURNITURE";
+  if (["ELECTRONICS", "ELECTRONIC"].includes(category ?? "") || /ELECTRONIC|GADGET/.test(category ?? "")) return "ELECTRONICS";
+  if (["CLOTH", "CLOTHS", "CLOTHING", "CLOTHES", "APPAREL", "FASHION", "TEXTILE", "TEXTILES"].includes(category ?? "") || /CLOTH|FASHION|APPAREL|TEXTILE/.test(category ?? "")) return "CLOTHS";
+  if (/FURNITURE/.test(category ?? "")) return "FURNITURE";
+  if (/RESTAURANT|FOOD|CAFE|BAKERY/.test(category ?? "")) return "RESTAURANT";
+  return "RESTAURANT";
+}
 
 export type Shop = {
   id: string;
   name: string;
   handle: string;
-  category: BusinessCategory;
+  category: ShopCategory;
   distance: string;
   area: string;
   city: string;
@@ -53,6 +65,7 @@ export type FeedPost = {
   price?: number;
   originalPrice?: number;
   badge?: string;
+  offerValidUntil?: string;
   liked?: boolean;
   saved?: boolean;
 };

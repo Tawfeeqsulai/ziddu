@@ -33,9 +33,11 @@ import { EmptyState } from "@/components/ui/states";
 import { useRouter } from "next/navigation";
 import { publishFollowChange } from "@/lib/follow-sync";
 import { UpiQrScanner } from "@/components/features/payment/upi-qr-scanner";
+import { getCurrentLocation } from "@/lib/current-location";
 
 type DiscoverExperienceProps = {
   data: DiscoveryData;
+  initialLocation?: { city: string | null; locality: string | null };
 };
 
 const categoryFilters = ["All", "Food", "Furniture", "Electronics", "Cloths"] as const;
@@ -46,7 +48,23 @@ function categoryMatches(filter: CategoryFilter, category: keyof typeof BUSINESS
   if (filter === "Food") return category === "RESTAURANT";
   if (filter === "Furniture") return category === "FURNITURE";
   if (filter === "Electronics") return category === "ELECTRONICS";
+  if (filter === "Cloths") return category === "CLOTHS";
   return false;
+}
+
+function postMatchesCategory(filter: CategoryFilter, post: FeedPost, category: Shop["category"]) {
+  if (filter === "All") return true;
+  const content = [post.title, post.description, ...post.hashtags].join(" ").toLowerCase();
+  const terms: Record<Exclude<CategoryFilter, "All">, string[]> = {
+    Food: ["food", "restaurant", "cafe", "café", "meal", "dish", "bakery", "biryani"],
+    Furniture: ["furniture", "sofa", "chair", "table", "bed", "cabinet", "interior"],
+    Electronics: ["electronics", "electronic", "laptop", "phone", "mobile", "computer", "tv", "gadget"],
+    Cloths: ["cloth", "clothes", "clothing", "fashion", "apparel", "textile", "dress", "shirt", "saree"],
+  };
+  const categories = Object.keys(terms) as Exclude<CategoryFilter, "All">[];
+  const postCategory = categories.find((candidate) => terms[candidate].some((term) => post.hashtags.join(" ").toLowerCase().includes(term)))
+    ?? categories.find((candidate) => terms[candidate].some((term) => content.includes(term)));
+  return postCategory ? postCategory === filter : categoryMatches(filter, category);
 }
 
 function formatPrice(price: number) {
@@ -61,7 +79,7 @@ function shopForPost(post: FeedPost, shops: Shop[]) {
   return shops.find((shop) => shop.id === post.shopId)!;
 }
 
-export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
+export default function DiscoverExperience({ data, initialLocation }: DiscoverExperienceProps) {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>("All");
   const [activeTab, setActiveTab] = useState("For you");
@@ -75,6 +93,35 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
   const [showAllShops, setShowAllShops] = useState(false);
   const [interactionError, setInteractionError] = useState("");
   const [showUpiScanner, setShowUpiScanner] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(initialLocation);
+  const [locationBusy, setLocationBusy] = useState(false);
+  const [locationError, setLocationError] = useState("");
+
+  async function updateCurrentLocation() {
+    setLocationBusy(true);
+    setLocationError("");
+    try {
+      const location = await getCurrentLocation();
+      setCurrentLocation({ city: location.city ?? null, locality: location.locality ?? null });
+      const response = await fetch("/api/location/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(location),
+      });
+      const result = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) {
+        setLocationError(result?.message ?? "Location found, but it could not be saved to your account.");
+        return;
+      }
+      router.refresh();
+    } catch (cause) {
+      setLocationError(cause instanceof Error ? cause.message : "We couldn't determine your location. Try again or enter your area manually.");
+    } finally {
+      setLocationBusy(false);
+    }
+  }
+
+  const locationLabel = [currentLocation?.locality, currentLocation?.city].filter(Boolean).join(", ") || "Set your location";
 
   useEffect(() => {
     const apply = (change: { shopId: string; active: boolean }) => {
@@ -104,8 +151,7 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
   const filteredPosts = useMemo(() => {
     return data.posts.filter((post) => {
       const shop = shopForPost(post, data.shops);
-      const matchesCategory =
-        categoryMatches(activeCategory, shop.category);
+      const matchesCategory = postMatchesCategory(activeCategory, post, shop.category);
       const matchesFollowing = activeTab !== "Following" || following.includes(shop.id);
       return matchesCategory && matchesFollowing;
     });
@@ -157,9 +203,9 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
         <a className="brand-lockup" href="#top" aria-label="ZIDDU home">
           <BrandLogo alt="" />
         </a>
-        <button className="location-control" type="button">
+        <button aria-label="Use my current location" className="location-control" disabled={locationBusy} onClick={() => { void updateCurrentLocation(); }} type="button">
           <span className="location-pin"><MapPin size={16} strokeWidth={2.3} /></span>
-          <span className="location-copy"><small>YOUR NEIGHBORHOOD</small><strong>Anna Nagar, Chennai</strong></span>
+          <span className="location-copy"><small>{locationBusy ? "FINDING YOUR LOCATION" : "YOUR NEIGHBORHOOD"}</small><strong>{locationLabel}</strong>{locationError && <span aria-live="polite" className="location-status" role="alert" title={locationError}>{locationError}</span>}</span>
           <ChevronDown size={15} />
         </button>
         <nav aria-label="Desktop navigation" className="desktop-nav">
@@ -208,8 +254,9 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
 
           <div className="rail-rule" />
           <div className="rail-heading"><span>NEAR YOU</span><button aria-label="Add a neighborhood" type="button"><Plus size={15} /></button></div>
-          <div className="neighborhood-row"><span className="neighborhood-dot" /> Anna Nagar <span className="neighborhood-distance">1.2 km</span></div>
-          <button className="subtle-link" type="button"><MapPin size={14} /> Use my location</button>
+          <div className="neighborhood-row"><span className="neighborhood-dot" /> {locationLabel}</div>
+          <button className="subtle-link" disabled={locationBusy} onClick={() => { void updateCurrentLocation(); }} type="button"><MapPin size={14} /> {locationBusy ? "Finding your location..." : "Use my location"}</button>
+          {locationError && <p className="rail-empty" role="alert">{locationError}</p>}
 
           <div className="rail-rule rail-lower" />
           <div className="small-promo">
@@ -274,8 +321,8 @@ export default function DiscoverExperience({ data }: DiscoverExperienceProps) {
 
         <aside className="right-rail">
           <section className="neighborhood-card">
-            <div className="neighborhood-map"><span className="map-street street-a">ANNA NAGAR</span><span className="map-street street-b">2ND AVENUE</span><span className="map-street street-c">SHANTI COLONY</span><span className="map-dash dash-a" /><span className="map-dash dash-b" /><span className="map-dash dash-c" /><span className="map-pin pin-a"><Store size={13} /></span><span className="map-pin pin-b"><Store size={13} /></span><span className="map-pin pin-c"><Store size={13} /></span><span className="map-you"><span /></span><span className="map-radius" /></div>
-            <div className="map-caption"><div><span className="section-kicker">YOUR LITTLE CORNER</span><strong>Anna Nagar, Chennai</strong><span>32 good spots within 1 km</span></div><button aria-label="Explore map" type="button"><ArrowUpRight size={16} /></button></div>
+            <div className="neighborhood-map"><span className="map-street street-a">{(currentLocation?.locality || "YOUR AREA").toUpperCase()}</span><span className="map-street street-b">{(currentLocation?.city || "LOCAL SHOPS").toUpperCase()}</span><span className="map-street street-c">NEARBY PLACES</span><span className="map-dash dash-a" /><span className="map-dash dash-b" /><span className="map-dash dash-c" /><span className="map-pin pin-a"><Store size={13} /></span><span className="map-pin pin-b"><Store size={13} /></span><span className="map-pin pin-c"><Store size={13} /></span><span className="map-you"><span /></span><span className="map-radius" /></div>
+            <div className="map-caption"><div><span className="section-kicker">YOUR LITTLE CORNER</span><strong>{locationLabel}</strong><span>{data.shops.length} local {data.shops.length === 1 ? "spot" : "spots"}</span></div><button aria-label="Explore map" type="button"><ArrowUpRight size={16} /></button></div>
           </section>
 
           <section className="rail-section popular-section">

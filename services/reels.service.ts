@@ -24,7 +24,7 @@ function shopView(shop: {
 }
 
 function mapDemoReels(data: Awaited<ReturnType<typeof getDiscoveryData>>, page: number, postId?: string): ReelsResult {
-  const reels = data.posts.filter((post) => post.mediaType === "video" || post.kind === "reel");
+  const reels = data.posts.filter((post) => Boolean(post.mediaUrl?.trim()) && (post.mediaType === "video" || post.kind === "reel"));
   const selected = postId ? reels.find((post) => post.id === postId) : undefined;
   const ordered = selected ? [selected, ...reels.filter((post) => post.id !== postId)] : reels;
   const start = selected ? 0 : (page - 1) * REELS_PAGE_SIZE;
@@ -41,7 +41,7 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
   try {
     const sharedData = await getDiscoveryData(userId);
     const sharedReels = sharedData.posts
-      .filter((post) => post.mediaType === "video" || post.kind === "reel")
+      .filter((post) => Boolean(post.mediaUrl?.trim()) && (post.mediaType === "video" || post.kind === "reel"))
       .map((post) => {
         const shop = sharedData.shops.find((item) => item.id === post.shopId);
         return shop ? { post, shop, followed: Boolean(shop.followed) } : null;
@@ -58,6 +58,7 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
     const now = new Date();
     const baseWhere = {
       type: "VIDEO" as const,
+      mediaUrl: { not: "" },
       OR: [
         { isOfferIncluded: false },
         { isOfferIncluded: true, offer: { is: { validityFrom: { lte: now }, validityTo: { gte: now } } } },
@@ -81,9 +82,9 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
     if (records.length === 0 && safePage === 1 && user?.city) {
       records = await prisma.post.findMany({ where: baseWhere, orderBy: { publishedAt: "desc" }, take: REELS_PAGE_SIZE, include });
     }
-    if (postId && safePage === 1 && !records.some((record) => record.id === postId)) {
-      const selected = await prisma.post.findFirst({ where: { ...localWhere, id: postId }, include });
-      if (selected) records = [selected, ...records].slice(0, REELS_PAGE_SIZE);
+    if (postId && safePage === 1) {
+      const selected = await prisma.post.findFirst({ where: { ...baseWhere, id: postId }, include });
+      if (selected) records = [selected, ...records.filter((record) => record.id !== postId)].slice(0, REELS_PAGE_SIZE);
     }
     const reels = records.map((record) => {
       const values = offerValue(record.offer?.offerValue);
@@ -94,7 +95,7 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
         post: {
           id: record.id, shopId: record.shopId, kind: record.isOfferIncluded ? "offer" as const : "reel" as const, title: record.title, description: record.description,
           image: record.thumbnailUrl ?? record.mediaUrl, imageAlt: record.altText ?? record.title, likes: record._count.likes, publishedAt: record.publishedAt.toISOString(), mediaType: "video" as const,
-          mediaUrl: record.mediaUrl, hashtags: readStringArray(record.hashtags), price: values.priceInr ?? record.offer?.product?.priceInr, originalPrice: values.originalPriceInr, badge: values.badge,
+          mediaUrl: record.mediaUrl, hashtags: readStringArray(record.hashtags), price: values.priceInr ?? record.offer?.product?.priceInr, originalPrice: values.originalPriceInr, badge: values.badge, offerValidUntil: record.offer?.validityTo.toISOString(),
           liked: record.likes.length > 0, saved: record.saves.length > 0,
         } satisfies FeedPost,
       };

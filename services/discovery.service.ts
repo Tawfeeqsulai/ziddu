@@ -1,8 +1,9 @@
-import type { DiscoveryData } from "@/types/commerce";
+import { normalizeBusinessCategory, type DiscoveryData } from "@/types/commerce";
 import { prisma } from "@/lib/db/prisma";
 import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
+import { normalizeVendorLocation } from "@/lib/vendor-location";
 
 type OfferValue = { priceInr?: number; originalPriceInr?: number; badge?: string };
 
@@ -36,7 +37,7 @@ function mapDatabaseData(posts: Array<{
     follows: Array<{ id: string }>;
     _count: { follows: number };
   };
-  offer: { offerValue: unknown; product: { priceInr: number } | null } | null;
+  offer: { offerValue: unknown; validityTo: Date; product: { priceInr: number } | null } | null;
   _count: { likes: number };
   likes: Array<{ id: string }>;
   saves: Array<{ id: string }>;
@@ -84,6 +85,7 @@ function mapDatabaseData(posts: Array<{
         price,
         originalPrice: values.originalPriceInr,
         badge: values.badge,
+        offerValidUntil: post.isOfferIncluded ? post.offer?.validityTo.toISOString() : undefined,
         liked: post.likes.length > 0,
         saved: post.saves.length > 0,
       };
@@ -104,14 +106,15 @@ async function getSharedDiscoveryData(): Promise<DiscoveryData> {
   });
 
   const shops = Array.from(new Map(records.map((record) => [record.vendor.id, record.vendor])).values()).map((vendor) => {
+    const location = normalizeVendorLocation(vendor.address);
     const name = vendor.businessName?.trim() || `Vendor ${vendor.id}`;
-    const category = vendor.businessCategory?.toUpperCase();
-    const normalizedCategory = category === "RESTAURANT" || category === "FURNITURE" || category === "ELECTRONICS" ? category : "RESTAURANT";
+    const normalizedCategory = normalizeBusinessCategory(vendor.businessCategory);
     return {
       id: String(vendor.id), name, handle: `vendor-${vendor.id}`, category: normalizedCategory,
-      distance: "Nearby", area: "", city: "", state: "", status: vendor.status.toLowerCase() === "inactive" ? "Closed" as const : "Open now" as const,
+      distance: "Nearby", area: location.locality, city: location.city, state: "", status: vendor.status.toLowerCase() === "inactive" ? "Closed" as const : "Open now" as const,
       rating: 0, initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
-      image: vendor.logoUrl || "/ziddu-logo.png", address: vendor.address || "", owner: "", phone: vendor.user.phoneNumber,
+      image: vendor.logoUrl || "/ziddu-logo.png", address: location.address, owner: "", phone: vendor.user.phoneNumber,
+      latitude: location.latitude, longitude: location.longitude,
     } satisfies DiscoveryData["shops"][number];
   });
   const posts = records.map((record) => {
@@ -123,7 +126,7 @@ async function getSharedDiscoveryData(): Promise<DiscoveryData> {
       title, description: `${record.vendor.businessName || "Local vendor"} shared a new ${record.postCategory || "post"}.`, image: record.postUrl, imageAlt: title,
       likes: 0, publishedAt: (record.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? record.postUrl : undefined,
       hashtags: record.postCategory ? [`#${record.postCategory.replace(/\s+/g, "")}`] : [], price: offerValue.priceInr,
-      originalPrice: offerValue.originalPriceInr, badge: offerValue.badge, liked: false, saved: false,
+      originalPrice: offerValue.originalPriceInr, badge: offerValue.badge, offerValidUntil: record.offer?.validityTo?.toISOString(), liked: false, saved: false,
     } satisfies DiscoveryData["posts"][number];
   });
   return { shops, posts, stories: [], purchases: [] };

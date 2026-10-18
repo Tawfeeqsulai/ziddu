@@ -39,7 +39,7 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
     }
     window.addEventListener("keydown", onKeyDown);
     return () => { observer.disconnect(); window.removeEventListener("keydown", onKeyDown); };
-  }, []);
+  }, [items.length]);
 
   async function interact(action: "like" | "save" | "follow", id: string) {
     if (!authenticated) return router.push("/login");
@@ -92,10 +92,10 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
     <header className="reels-topbar"><BackButton label="Go back" /><span><span className="section-kicker">ZIDDU VIDEO</span><strong>Videos</strong></span><span className="reels-key-hint"><ArrowUp size={13} /><ArrowDown size={13} /></span></header>
     <div className="reels-scroll" onScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight > element.scrollHeight - element.clientHeight * 1.5) void loadMore(); }}>
       {items.map(({ post, shop }) => <article className="reel-surface" key={post.id} onDoubleClick={(event) => { if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLAnchorElement) return; void interact("like", post.id); }}>
-        {failedVideos.includes(post.id) ? <div className="reel-video-failure"><span>Unable to load this Reel</span><small>{shop.name} · {shop.area}, {shop.city}</small></div> : <ReelVideoPlayer alt={post.imageAlt} onError={() => setFailedVideos((current) => [...current, post.id])} poster={post.image} src={post.mediaUrl ?? post.image} />}
+        {failedVideos.includes(post.id) ? <div className="reel-video-failure"><span>Video couldn&apos;t connect</span><small>{shop.name} · {shop.area}, {shop.city}</small><button onClick={() => setFailedVideos((current) => current.filter((id) => id !== post.id))} type="button">Try again</button></div> : <ReelVideoPlayer alt={post.imageAlt} onError={() => setFailedVideos((current) => current.includes(post.id) ? current : [...current, post.id])} poster={post.image} src={post.mediaUrl!} />}
         <div className="reels-scrim" aria-hidden="true" />
         {post.price !== undefined && <div className="reels-offer reels-offer-top"><strong>{post.badge ?? "Local offer"}</strong><b>{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(post.price)}</b></div>}
-        <div className="reels-actions"><SocialActions accessibleName={`Video from ${shop.name}`} liked={liked.includes(post.id)} onLike={() => { void interact("like", post.id); }} onSave={() => { void interact("save", post.id); }} onShare={() => { void share(post.id, post.title); }} saved={saved.includes(post.id)} overlay /><DirectionsButton className="reels-location" compact label={`${shop.area}, ${shop.city}`} shop={shop} /></div>
+        <div className="reels-actions"><SocialActions accessibleName={`Video from ${shop.name}`} liked={liked.includes(post.id)} onLike={() => { void interact("like", post.id); }} onSave={() => { void interact("save", post.id); }} onShare={() => { void share(post.id, post.title); }} saved={saved.includes(post.id)} overlay trailingAction={<DirectionsButton className="reels-location" compact icon="pin" label="Direction" shop={shop} />} /></div>
         <div className="reels-info"><div className="reels-business"><Link aria-label={`Open ${shop.name}`} href={`/shops/${shop.id}`}><span className="reels-avatar">{shop.initials}</span><strong>{shop.name}</strong></Link><button className={followed.includes(shop.id) ? "is-following" : ""} onClick={() => { void interact("follow", shop.id); }} type="button">{followed.includes(shop.id) ? <><Check size={13} /> Following</> : "Follow"}</button></div><h2>{post.title}</h2><p>{post.description}</p></div>
       </article>)}
       {loadingMore && <div className="reels-loading-more">Loading more Videos...</div>}

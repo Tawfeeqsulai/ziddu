@@ -15,13 +15,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `${profile.shop.name} — ZIDDU`, description: `${profile.shop.description} ${profile.shop.area}, ${profile.shop.city}.` };
 }
 
-export default async function ShopPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function ShopPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ order?: string }> }) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const user = await getCurrentUser();
   const profile = await getShopProfile(id, user?.id);
   if (!profile) notFound();
   const history = user ? await getPurchaseHistory(user.id) : undefined;
   const orders = history?.all.records.filter((record) => record.vendorId === id) ?? [];
+  const initialOrderId = orders.some((order) => order.billId === query.order && !["paid", "success", "completed", "cancelled", "rejected", "ready"].includes(order.status.toLowerCase())) ? query.order : undefined;
 
-  return <ShopProfileExperience key={id} orders={orders} profile={profile} authenticated={Boolean(user)} />;
+  return <ShopProfileExperience initialOrderId={initialOrderId} key={id} orders={orders} profile={profile} authenticated={Boolean(user)} />;
 }

@@ -9,6 +9,23 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     const parsed = normalizedLocationSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ message: "Invalid location." }, { status: 400 });
-    const location = await prisma.user.update({ where: { id: user.id }, data: parsed.data, select: { city: true, locality: true, address: true, state: true, pincode: true, latitude: true, longitude: true } });
-    return NextResponse.json({ location });
+    try {
+        const location = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                address: parsed.data.address,
+                locality: parsed.data.locality,
+                city: parsed.data.city,
+                state: parsed.data.state,
+                pincode: parsed.data.pincode,
+                latitude: parsed.data.latitude,
+                longitude: parsed.data.longitude,
+            },
+            select: { city: true, locality: true, address: true, state: true, pincode: true, latitude: true, longitude: true },
+        });
+        return NextResponse.json({ location });
+    } catch (error) {
+        console.error("Unable to save the user's current location.", error);
+        return NextResponse.json({ message: "Location was found but could not be saved to your account." }, { status: 500 });
+    }
 }
