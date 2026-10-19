@@ -121,6 +121,8 @@ model User {
   follows       Follow[]
   likes         Like[]
   saves         Save[]
+  feedInteractions FeedInteraction[]
+  feedShares    FeedShare[]
   bills         Bill[]    @relation("BillEndUser")
   affiliate     Affiliate?
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferredUser")
@@ -372,6 +374,37 @@ model Save {
   @@unique([userId, postId])
   @@index([postId, createdAt])
   @@map("save")
+}
+
+// These records also support vendor posts stored in the separate legacy DB,
+// whose numeric post IDs cannot be foreign keys to this app's Post table.
+model FeedInteraction {
+  id         String   @id @default(cuid())
+  userId     String
+  targetType String   @map("target_type") @db.VarChar(12)
+  targetId   String   @map("target_id") @db.VarChar(120)
+  action     String   @db.VarChar(12)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId, action])
+  @@index([targetType, targetId, action, active])
+  @@map("feed_interaction")
+}
+
+model FeedShare {
+  id         String   @id @default(cuid())
+  userId     String
+  targetType String   @map("target_type") @db.VarChar(12)
+  targetId   String   @map("target_id") @db.VarChar(120)
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([userId, createdAt])
+  @@map("feed_share")
 }
 
 model Purchase {

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { normalizeIndianPhone } from "@/lib/auth/phone";
 import { prisma } from "@/lib/db/prisma";
+import { calculateOfferLine, offerPricing } from "@/lib/offer-pricing";
 
 const BILLING_API_URL = "https://zoggy-backend-api.vercel.app/api/userbilling";
 
@@ -52,13 +53,23 @@ export async function POST(request: Request) {
   if (!vendor) return NextResponse.json({ message: "This vendor is unavailable." }, { status: 404 });
 
   const requestedItemIds = [...new Set(parsed.data.items.map((item) => item.itemId))];
-  const menuItems = await sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: vendor.id, id: { in: requestedItemIds } }, select: { id: true, price: true } });
+  const [menuItems, offers] = await Promise.all([
+    sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: vendor.id, id: { in: requestedItemIds } }, select: { id: true, price: true } }),
+    sharedPrisma.sharedOffer.findMany({ where: { vendorId: vendor.id, offerTargetId: { in: requestedItemIds } }, select: { offerTargetId: true, offerTargetType: true, offerType: true, offerValue: true, validityFrom: true, validityTo: true } }),
+  ]);
   const prices = new Map(menuItems.map((item) => [item.id, Number(item.price)]));
   if (menuItems.length !== requestedItemIds.length) return NextResponse.json({ message: "One or more menu items are no longer available." }, { status: 409 });
 
   const products = parsed.data.items.map((item) => {
     const price = prices.get(item.itemId)!;
-    return { item_id: item.itemId, quantity: item.quantity, price, total_price: Math.round(price * item.quantity * 100) / 100 };
+    const now = new Date();
+    const active = offers.find((offer) => {
+      const targetType = offer.offerTargetType?.toUpperCase();
+      return offer.offerTargetId === item.itemId && (!targetType || /ITEM|PRODUCT|MENU/.test(targetType)) && (!offer.validityFrom || offer.validityFrom <= now) && (!offer.validityTo || offer.validityTo >= now);
+    });
+    const line = calculateOfferLine(price, item.quantity, offerPricing(active?.offerType, active?.offerValue));
+    const appliedUnitPrice = line.total / line.billedQuantity;
+    return { item_id: item.itemId, quantity: line.billedQuantity, price: Math.round(appliedUnitPrice * 100) / 100, total_price: Math.round(line.total * 100) / 100 };
   });
   const totalPrice = Math.round(products.reduce((total, product) => total + product.total_price, 0) * 100) / 100;
   const payload = { vendor_id: vendor.id, end_user_id: endUser.id, products, total_price: totalPrice };

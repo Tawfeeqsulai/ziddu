@@ -11,7 +11,6 @@ import {
   VolumeX,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { DirectionsButton } from "@/components/ui/directions-button";
 import { PostContainer } from "@/components/ui/post-container";
 import { SocialActions } from "@/components/ui/social-actions";
@@ -20,6 +19,7 @@ import type { FeedPost, Shop } from "@/types/commerce";
 export type PostCoreProps = {
   post: FeedPost;
   shop: Shop;
+  distanceLabel?: string;
   followed: boolean;
   liked: boolean;
   saved: boolean;
@@ -28,10 +28,12 @@ export type PostCoreProps = {
   onSave: () => void;
   onOpenShop: () => void;
   onCheckout: () => void;
+  hideFollow?: boolean;
 };
 
 export type PostEngagement = {
   shareLabel: string;
+  shareCount: number;
   onShare: () => void;
 };
 
@@ -39,16 +41,21 @@ export type PostPresentationProps = PostCoreProps & {
   engagement: PostEngagement;
 };
 
-function formatCount(count: number) {
-  return count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count);
-}
-
 export function ShopAvatar({ shop, size = 42 }: { shop: Shop; size?: number }) {
   return <Avatar alt={shop.name} className="post-shop-avatar" image={shop.image} initials={shop.initials} size="md" style={{ height: size, width: size }} />;
 }
 
-export function ShopInfo({ shop }: { shop: Shop }) {
-  const locationText = shop.area || shop.city || "Location not added";
+export function ShopInfo({ shop, distanceLabel }: { shop: Shop; distanceLabel?: string }) {
+  const rawDistance = distanceLabel || (shop.distance !== "Nearby" ? `${shop.distance} away` : "Nearby");
+  const numericDistance = rawDistance.match(/^(\d+(?:\.\d+)?)\s*(m|km)(?:\s+away)?$/i);
+  const distanceKm = numericDistance
+    ? Number(numericDistance[1]) * (numericDistance[2].toLowerCase() === "m" ? 0.001 : 1)
+    : null;
+  const distance = distanceKm === null
+    ? rawDistance
+    : distanceKm < 1
+      ? `${Math.max(1, Math.round(distanceKm * 1000))} m away`
+      : `${Number(distanceKm.toFixed(1))} km away`;
   return (
     <Link className="post-shop-identity" href={`/shops/${shop.id}`}>
       <ShopAvatar shop={shop} />
@@ -56,10 +63,7 @@ export function ShopInfo({ shop }: { shop: Shop }) {
         <strong>{shop.name}</strong>
         <span className="post-shop-location">
           <MapPin size={12} />
-          <span className="post-location-preview">{locationText}</span>
-          <span className="post-location-text">{locationText}</span>
-          <i className={`open-status-dot ${shop.status === "Closed" ? "is-closed" : ""}`} />
-          <span className="post-open-status">{shop.status}</span>
+          <span className="post-location-distance">{distance}</span>
         </span>
       </span>
     </Link>
@@ -71,42 +75,53 @@ export function LocationInfo({ shop, overlay = false }: { shop: Shop; overlay?: 
   return <DirectionsButton className={`${overlay ? "reel-location" : ""} social-location`} compact={overlay} icon={overlay ? "pin" : "navigation"} label={overlay ? "Direction" : locationText} shop={shop} />;
 }
 
-export function PostHeader({ shop, followed, onFollow }: PostCoreProps) {
+export function PostHeader({ shop, followed, onFollow, distanceLabel, hideFollow = false }: PostCoreProps) {
   return (
     <header className="social-post-header">
-      <ShopInfo shop={shop} />
-      <div className="post-header-actions">
+      <ShopInfo distanceLabel={distanceLabel} shop={shop} />
+      {!hideFollow && <div className="post-header-actions">
         <button aria-label={`${followed ? "Unfollow" : "Follow"} ${shop.name}`} className={`post-follow ${followed ? "is-following" : ""}`} onClick={onFollow} type="button">
           {followed ? <><Check size={13} /> Following</> : "Follow"}
         </button>
-      </div>
+      </div>}
     </header>
   );
 }
 
-export function PostActions({ liked, saved, shop, onLike, onSave, engagement, layout = "inline" }: PostCoreProps & { engagement: PostEngagement; layout?: "inline" | "reel" }) {
-  const router = useRouter();
+export function PostActions({ liked, saved, shop, post, onLike, onSave, engagement, layout = "inline" }: PostCoreProps & { engagement: PostEngagement; layout?: "inline" | "reel" }) {
   const overlay = layout === "reel";
+  const likeCount = Math.max(0, post.likes + (liked === Boolean(post.liked) ? 0 : liked ? 1 : -1));
+  const saveCount = Math.max(0, (post.saves ?? 0) + (saved === Boolean(post.saved) ? 0 : saved ? 1 : -1));
+  const [directionCount, setDirectionCount] = useState(post.directionCount ?? 0);
+  useEffect(() => setDirectionCount(post.directionCount ?? 0), [post.directionCount, post.id]);
+  function recordDirection() {
+    setDirectionCount((count) => count + 1);
+    void fetch("/api/feed/interactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "direction", postId: post.id }),
+      keepalive: true,
+    }).then(async (response) => {
+      if (!response.ok) throw new Error("Direction count unavailable");
+      const result = await response.json() as { directionCount?: number };
+      if (typeof result.directionCount === "number") setDirectionCount(result.directionCount);
+      window.dispatchEvent(new Event("ziddu:feed-mutation"));
+    }).catch(() => setDirectionCount((count) => Math.max(0, count - 1)));
+  }
   return (
     <div className={`social-post-actions ${overlay ? "reel-actions" : ""}`}>
-      <SocialActions accessibleName={`${overlay ? "Reel" : "post"} from ${shop.name}`} liked={liked} onLike={onLike} onSave={onSave} onShare={engagement.onShare} overlay={overlay} saved={saved} trailingAction={<Button aria-label={`Direction to ${shop.name}`} className="social-action" onClick={() => router.push(`/directions/${shop.id}`)} variant="icon"><MapPin size={overlay ? 27 : 24} />{overlay && <span>Direction</span>}</Button>} />
+      <SocialActions accessibleName={`${overlay ? "Reel" : "post"} from ${shop.name}`} likeCount={likeCount} liked={liked} onLike={onLike} onSave={onSave} onShare={engagement.onShare} overlay={overlay} saveCount={saveCount} saved={saved} shareCount={engagement.shareCount} trailingAction={<DirectionsButton className={overlay ? "social-action post-direction-action" : "post-direction-button"} compact icon="pin" label={overlay ? "Direction" : "Get directions"} count={directionCount} onClick={recordDirection} shop={shop} />} />
     </div>
   );
 }
 
-export function PostCaption({ post, overlay = false, shopName, onOpenShop }: { post: FeedPost; overlay?: boolean; shopName?: string; onOpenShop?: () => void }) {
+export function PostCaption({ post, overlay = false, showHashtags = true }: { post: FeedPost; overlay?: boolean; showHashtags?: boolean }) {
   return (
     <div className={`social-caption ${overlay ? "reel-caption" : ""}`}>
-      {shopName && onOpenShop && <button className="caption-shop-name" onClick={onOpenShop} type="button">{shopName}</button>}
       <strong>{post.title}</strong>
-      <span>{post.description}</span>
-      {post.hashtags.length > 0 && <span className="post-hashtags">{post.hashtags.join(" ")}</span>}
+      {showHashtags && post.hashtags.length > 0 && <span className="post-hashtags">{post.hashtags.join(" ")}</span>}
     </div>
   );
-}
-
-function PostStats({ post, liked }: { post: FeedPost; liked: boolean }) {
-  return <div className="social-post-stats">{formatCount(post.likes + (liked ? 1 : 0))} likes</div>;
 }
 
 function relativeTimestamp(value: string, now: number) {
@@ -150,7 +165,7 @@ function formatOfferCountdown(validUntil: string, now: number) {
   return `Ends in ${remainder}s`;
 }
 
-function OfferNotice({ validUntil }: { validUntil?: string }) {
+function OfferNotice({ validUntil, label }: { validUntil?: string; label?: string }) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     const update = () => setNow(Date.now());
@@ -162,9 +177,10 @@ function OfferNotice({ validUntil }: { validUntil?: string }) {
   const countdownLabel = countdown.startsWith("Ends in ")
     ? <>Ends in <b>{countdown.slice("Ends in ".length)}</b></>
     : countdown;
-  return <div aria-label={`Offer. ${countdown}`} className="post-offer-banner" role="timer">
+  return <div aria-label={`Offer: ${label || "Special deal"}. ${countdown}`} className="post-offer-banner" role="timer">
     <strong>OFFER</strong>
     <span>{countdownLabel}</span>
+    <em className="post-offer-deal">{label || "Special Deal"}</em>
   </div>;
 }
 
@@ -181,20 +197,30 @@ function OfferEndedWatermark({ validUntil }: { validUntil?: string }) {
 }
 
 export function ImagePost(props: PostPresentationProps) {
-  const { post, shop, liked, onOpenShop, engagement } = props;
+  const { post, shop, engagement, hideFollow = false, onLike } = props;
+  const lastMediaTap = useRef(0);
   return (
     <PostContainer className="social-post image-post" variant="image">
-      <PostHeader {...props} />
-      <div className="social-post-media image-post-media">
+      <PostHeader {...props} hideFollow={hideFollow} />
+      <div className="social-post-media image-post-media" onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button, a")) return;
+        const now = Date.now();
+        if (now - lastMediaTap.current < 350) {
+          event.preventDefault();
+          lastMediaTap.current = 0;
+          onLike();
+        } else {
+          lastMediaTap.current = now;
+        }
+      }}>
         <Image alt={post.imageAlt} fill loading="lazy" sizes="(max-width: 620px) 100vw, 680px" src={post.image} unoptimized />
         {post.kind === "offer" && <OfferEndedWatermark validUntil={post.offerValidUntil} />}
       </div>
-      {post.kind === "offer" && <OfferNotice validUntil={post.offerValidUntil} />}
+      {post.kind === "offer" && <OfferNotice label={post.badge} validUntil={post.offerValidUntil} />}
       <div className="social-post-body">
         <PostActions {...props} engagement={engagement} />
-        <PostStats liked={liked} post={post} />
-        <PostCaption onOpenShop={onOpenShop} post={post} shopName={shop.name} />
         <div className="post-location-time">
+          {post.hashtags.length > 0 && <span className="post-hashtags">{post.hashtags.join(" ")}</span>}
           <PostTimestamp value={post.publishedAt} />
         </div>
         <span aria-live="polite" className="share-feedback">{engagement.shareLabel}</span>
@@ -220,7 +246,7 @@ function ReelVideo({ post, muted, videoRef }: { post: FeedPost; muted: boolean; 
 }
 
 export function VideoPost(props: PostPresentationProps) {
-  const { post, shop, followed, liked, saved, onFollow, onLike, onSave, onOpenShop, onCheckout, engagement } = props;
+  const { post, shop, followed, liked, saved, onFollow, onLike, onSave, onOpenShop, onCheckout, engagement, hideFollow = false } = props;
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const openVideoTimer = useRef<number | null>(null);
@@ -233,9 +259,36 @@ export function VideoPost(props: PostPresentationProps) {
     if (videoRef.current) videoRef.current.muted = nextMuted;
   }
 
+  function handleStageDoubleTap(event: React.MouseEvent<HTMLDivElement>) {
+    if ((event.target as HTMLElement).closest("button, a")) return;
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const position = bounds.width ? (event.clientX - bounds.left) / bounds.width : 0.5;
+    const video = videoRef.current;
+    if (position < 1 / 3) {
+      if (video && Number.isFinite(video.duration)) video.currentTime = Math.max(0, video.currentTime - 10);
+    } else if (position > 2 / 3) {
+      if (video && Number.isFinite(video.duration)) video.currentTime = Math.min(video.duration, video.currentTime + 10);
+    } else {
+      onLike();
+    }
+  }
+
   return (
     <PostContainer className="video-post" variant="reel">
-      <div className="reel-stage" onClick={(event) => { if ((event.target as HTMLElement).closest("button, a")) return; if (openVideoTimer.current !== null) window.clearTimeout(openVideoTimer.current); openVideoTimer.current = window.setTimeout(() => router.push(`/reels?post=${encodeURIComponent(post.id)}`), 260); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("button, a")) return; event.preventDefault(); if (openVideoTimer.current !== null) window.clearTimeout(openVideoTimer.current); openVideoTimer.current = null; onLike(); }}>
+      <div className="reel-stage" onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button, a")) return;
+        if (openVideoTimer.current !== null) {
+          window.clearTimeout(openVideoTimer.current);
+          openVideoTimer.current = null;
+          handleStageDoubleTap(event);
+          return;
+        }
+        openVideoTimer.current = window.setTimeout(() => {
+          router.push(`/reels?post=${encodeURIComponent(post.id)}`);
+          openVideoTimer.current = null;
+        }, 350);
+      }}>
         <Image alt={post.imageAlt} className="reel-poster" fill loading="lazy" sizes="(max-width: 620px) 100vw, 420px" src={post.image} unoptimized />
         {post.kind === "offer" && <OfferEndedWatermark validUntil={post.offerValidUntil} />}
         {post.mediaUrl && <ReelVideo muted={muted} post={post} videoRef={videoRef} />}
@@ -256,13 +309,13 @@ export function VideoPost(props: PostPresentationProps) {
           onCheckout={onCheckout}
         />
         <div className="reel-bottom-info">
-          {post.kind === "offer" && <OfferNotice validUntil={post.offerValidUntil} />}
+          {post.kind === "offer" && <OfferNotice label={post.badge} validUntil={post.offerValidUntil} />}
           <div className="reel-business-line">
             <button className="reel-shop-name" onClick={onOpenShop} type="button">
               <ShopAvatar shop={shop} size={38} />
               <strong>{shop.name}</strong>
             </button>
-            <button className={`post-follow reel-follow ${followed ? "is-following" : ""}`} onClick={onFollow} type="button">{followed ? "Following" : "Follow"}</button>
+            {!hideFollow && <button className={`post-follow reel-follow ${followed ? "is-following" : ""}`} onClick={onFollow} type="button">{followed ? "Following" : "Follow"}</button>}
           </div>
           <PostCaption overlay post={post} />
           <div className="post-location-time">

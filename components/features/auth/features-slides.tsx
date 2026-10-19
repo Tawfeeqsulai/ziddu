@@ -153,14 +153,14 @@ export function FeaturesSlides({ onSkip }: { onSkip?: () => void }) {
             <div className="features-slides-controls"><button aria-label="Previous feature" onClick={() => move(-1)} type="button"><ArrowLeft size={17} /></button><div aria-label={`Slide ${active + 1} of ${slides.length}`} className="features-slide-dots">{slides.map((item, index) => <button aria-label={`Show slide ${index + 1}`} aria-selected={active === index} className={active === index ? "is-active" : ""} key={item.eyebrow} onClick={() => setActive(index)} role="tab" type="button" />)}</div><button aria-label="Next feature" onClick={() => move(1)} type="button"><ArrowRight size={17} /></button></div>
             <div className="features-mobile-screen" onTouchEnd={handleTouchEnd} onTouchStart={(event) => { touchStartX.current = event.changedTouches[0].clientX; }}>
                 <header className="features-mobile-topbar">
-                    <button aria-label={active === 0 ? "Back to login" : "Previous feature"} disabled={active === 0} onClick={() => setActive((current) => Math.max(0, current - 1))} type="button"><ArrowLeft size={19} /></button>
+                    <button aria-label={active === 0 ? "Back to login" : "Previous feature"} onClick={() => { if (active === 0) onSkip?.(); else setActive((current) => current - 1); }} type="button"><ArrowLeft size={19} /></button>
                     {onSkip && <button className="features-mobile-skip" onClick={onSkip} type="button">Skip</button>}
                 </header>
+                <MobileArtwork active={active} locationBusy={locationBusy} locationError={locationError} locationMessage={locationMessage} onRequestLocation={() => { void requestCurrentLocation(); }} />
                 <div className="features-mobile-copy" key={`copy-${active}`}>
                     <h2>{slide.mobileTitle}</h2>
                     <p>{slide.description}</p>
                 </div>
-                <MobileArtwork active={active} locationBusy={locationBusy} locationError={locationError} locationMessage={locationMessage} onRequestLocation={() => { void requestCurrentLocation(); }} />
                 <footer className="features-mobile-footer">
                     <div aria-label={`Slide ${active + 1} of ${slides.length}`} className="features-mobile-dots" role="tablist">
                         {slides.map((item, index) => <button aria-label={`Show slide ${index + 1}`} aria-selected={active === index} className={active === index ? "is-active" : ""} key={item.eyebrow} onClick={() => setActive(index)} role="tab" type="button" />)}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppNavigation } from "@/components/ui/bottom-navigation";
+import { RealtimeUpdates } from "@/components/ui/realtime-updates";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-full"><AppNavigation>{children}</AppNavigation></body>
+      <body className="min-h-full"><RealtimeUpdates /><AppNavigation>{children}</AppNavigation></body>
     </html>
   );
 }

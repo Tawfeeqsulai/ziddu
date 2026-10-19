@@ -9,7 +9,7 @@ type MainTab = "Home" | "Search" | "Videos" | "Saved";
 
 const lastTabStorageKey = "ziddu:last-bottom-tab";
 const tabRoutes: Record<MainTab, string> = { Home: "/", Search: "/search", Videos: "/reels", Saved: "/saved" };
-const bottomNavigationRoutes = new Set(["/", "/search", "/saved", "/ai"]);
+const bottomNavigationRoutes = new Set(["/", "/search", "/saved", "/ai", "/reels"]);
 
 const defaultItems: NavigationItem[] = [
   { label: "Home", icon: Home },
@@ -21,7 +21,7 @@ const AppNavigationContext = createContext(false);
 
 export function BottomNavigation({ items = defaultItems, global = false, showProfile = false }: { items?: NavigationItem[]; global?: boolean; showProfile?: boolean } = {}) {
   const inAppNavigation = useContext(AppNavigationContext);
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const router = useRouter();
   if (inAppNavigation && !global) return null;
 
@@ -57,12 +57,16 @@ export function BottomNavigation({ items = defaultItems, global = false, showPro
       </defs>
       <path d="M0 38 Q0 18 24 18 H132 C164 18 166 0 200 0 C234 0 236 18 268 18 H376 Q400 18 400 42 V112 H0 Z" fill="url(#navigation-fill)" stroke="url(#navigation-outline)" strokeWidth="1.5" />
     </svg>
-    {navigationItems.map(({ label, icon: Icon, active, onClick }) => <button aria-current={active ? "page" : undefined} className={[active ? "is-active" : "", label === "ZIDDU AI" ? "is-ai" : ""].filter(Boolean).join(" ")} key={label} onClick={onClick} type="button"><span className="ui-bottom-navigation-icon"><Icon aria-hidden="true" size={label === "ZIDDU AI" ? 34 : 25} /></span><span>{label === "ZIDDU AI" ? "Ziddu AI" : label}</span></button>)}
+    {navigationItems.map(({ label, icon: Icon, active, onClick }) => {
+      const route = global && label in tabRoutes ? tabRoutes[label as MainTab] : global && label === "ZIDDU AI" ? "/ai" : undefined;
+      const prefetchRoute = () => { if (route) router.prefetch(route); };
+      return <button aria-current={active ? "page" : undefined} className={[active ? "is-active" : "", label === "ZIDDU AI" ? "is-ai" : ""].filter(Boolean).join(" ")} key={label} onClick={onClick} onFocus={prefetchRoute} onPointerEnter={prefetchRoute} type="button"><span className="ui-bottom-navigation-icon"><Icon aria-hidden="true" size={label === "ZIDDU AI" ? 34 : 25} /></span><span>{label === "ZIDDU AI" ? "Ziddu AI" : label}</span></button>;
+    })}
   </nav>;
 }
 
 export function AppNavigation({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const router = useRouter();
   const restoredInitialTab = useRef(false);
   const showNavigation = bottomNavigationRoutes.has(pathname) || pathname.startsWith("/shops/");

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { normalizeIndianPhone } from "@/lib/auth/phone";
 import { prisma } from "@/lib/db/prisma";
 import { sharedPrisma } from "@/lib/db/shared-prisma";
+import { calculateOfferLine, offerPricing } from "@/lib/offer-pricing";
 
 const updateSchema = z.object({
   vendorId: z.coerce.number().int().positive(),
@@ -12,7 +13,23 @@ const updateSchema = z.object({
 });
 
 type BillProduct = { item_id: number; quantity: number; price: number; total_price: number };
-type BillPayload = { products?: BillProduct[]; _updateRequestIds?: string[] };
+type BillPayload = { products?: unknown[]; _updateRequestIds?: string[] };
+
+function normalizeBillProducts(value: unknown): BillProduct[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const row = entry as Record<string, unknown>;
+    const product = row.product && typeof row.product === "object" ? row.product as Record<string, unknown> : {};
+    const itemId = Number(row.item_id ?? row.itemId ?? product.item_id ?? product.itemId ?? product.id);
+    const quantity = Number(row.quantity);
+    const price = Number(row.price ?? row.unit_price ?? row.unitPrice ?? product.price ?? product.unit_price ?? product.unitPrice);
+    if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0) return [];
+    const total = Number(row.total_price ?? quantity * price);
+    return [{ item_id: itemId, quantity, price, total_price: Number.isFinite(total) && total >= 0 ? total : Math.round(quantity * price * 100) / 100 }];
+  });
+}
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ billId: string }> }) {
   const user = await getCurrentUser();
@@ -33,21 +50,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ bi
   if (!bill) return NextResponse.json({ message: "Order not found." }, { status: 404 });
   if (["paid", "success", "completed", "cancelled", "rejected", "ready"].includes(bill.paymentStatus.toLowerCase())) return NextResponse.json({ message: "This order can no longer be changed." }, { status: 409 });
 
-  const current = bill.products && typeof bill.products === "object" && !Array.isArray(bill.products) ? bill.products as BillPayload : { products: Array.isArray(bill.products) ? bill.products as BillProduct[] : [] };
+  const current = bill.products && typeof bill.products === "object" && !Array.isArray(bill.products) ? bill.products as BillPayload : { products: Array.isArray(bill.products) ? bill.products : [] };
   if ((current._updateRequestIds ?? []).includes(parsed.data.requestId)) return NextResponse.json({ billId: bill.id, total: Number(bill.totalPrice), duplicate: true });
   const uniqueItemIds = [...new Set(parsed.data.items.map((item) => item.itemId))];
-  const items = await sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: bill.vendorId, id: { in: uniqueItemIds } }, select: { id: true, price: true } });
+  const [items, offers] = await Promise.all([
+    sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: bill.vendorId, id: { in: uniqueItemIds } }, select: { id: true, price: true } }),
+    sharedPrisma.sharedOffer.findMany({ where: { vendorId: bill.vendorId, offerTargetId: { in: uniqueItemIds } }, select: { offerTargetId: true, offerTargetType: true, offerType: true, offerValue: true, validityFrom: true, validityTo: true } }),
+  ]);
   if (items.length !== uniqueItemIds.length) return NextResponse.json({ message: "One or more menu items are unavailable." }, { status: 409 });
   const prices = new Map(items.map((item) => [item.id, Number(item.price)]));
-  const merged = [...(current.products ?? [])];
-  for (const requested of parsed.data.items) {
+  const now = new Date();
+  const additions = parsed.data.items.map((requested) => {
     const price = prices.get(requested.itemId)!;
-    const existing = merged.find((item) => item.item_id === requested.itemId);
+    const active = offers.find((offer) => {
+      const targetType = offer.offerTargetType?.toUpperCase();
+      return offer.offerTargetId === requested.itemId && (!targetType || /ITEM|PRODUCT|MENU/.test(targetType)) && (!offer.validityFrom || offer.validityFrom <= now) && (!offer.validityTo || offer.validityTo >= now);
+    });
+    const line = calculateOfferLine(price, requested.quantity, offerPricing(active?.offerType, active?.offerValue));
+    const appliedUnitPrice = line.total / line.billedQuantity;
+    return { item_id: requested.itemId, quantity: line.billedQuantity, price: Math.round(appliedUnitPrice * 100) / 100, total_price: Math.round(line.total * 100) / 100 };
+  });
+  // Preserve the discounted line total while using an effective per-served-unit
+  // price so the vendor's quantity × price calculation stays consistent.
+  const merged = normalizeBillProducts(current.products);
+  for (const requested of additions) {
+    const existing = merged.find((item) => item.item_id === requested.item_id && item.price === requested.price);
     if (existing) {
       existing.quantity += requested.quantity;
-      existing.total_price = Math.round(existing.quantity * existing.price * 100) / 100;
+      existing.total_price = Math.round((existing.total_price + requested.total_price) * 100) / 100;
     } else {
-      merged.push({ item_id: requested.itemId, quantity: requested.quantity, price, total_price: Math.round(price * requested.quantity * 100) / 100 });
+      merged.push(requested);
     }
   }
   const total = Math.round(merged.reduce((sum, item) => sum + item.total_price, 0) * 100) / 100;

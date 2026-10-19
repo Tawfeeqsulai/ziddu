@@ -1,26 +1,130 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 
-type RouteMapProps = { origin: { latitude: number; longitude: number }; destination: { latitude: number; longitude: number }; geometry: Array<[number, number]> };
+type Coordinates = { latitude: number; longitude: number };
+type Point = { lat: number; lng: number };
+type RouteSummary = { distance: string; duration: string };
+type RouteMapProps = {
+  apiKey: string;
+  vendorName: string;
+  origin: Coordinates | null;
+  destination: Coordinates;
+  routeRequestId: number;
+  onRouteSummary: (summary: RouteSummary | null) => void;
+  onRouteLoading: (loading: boolean) => void;
+  onRouteError: (message: string) => void;
+};
 
-export default function RouteMap({ origin, destination, geometry }: RouteMapProps) {
-    const mapElement = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        let active = true;
-        let map: import("leaflet").Map | undefined;
-        let layers: import("leaflet").Layer[] = [];
-        void import("leaflet").then((leaflet) => {
-            if (!active || !mapElement.current) return;
-            map = leaflet.map(mapElement.current, { zoomControl: true }).setView([destination.latitude, destination.longitude], 14);
-            leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
-            const points = geometry.map(([longitude, latitude]) => [latitude, longitude] as [number, number]);
-            const bounds = leaflet.latLngBounds([[origin.latitude, origin.longitude], [destination.latitude, destination.longitude], ...points]);
-            layers = [leaflet.polyline(points, { color: "#176fe5", weight: 5, opacity: .9 }).addTo(map), leaflet.marker([origin.latitude, origin.longitude]).addTo(map).bindTooltip("You"), leaflet.marker([destination.latitude, destination.longitude]).addTo(map).bindTooltip("Shop")];
-            map.fitBounds(bounds, { padding: [24, 24] });
+let configuredApiKey: string | null = null;
+
+function configureGoogleMaps(apiKey: string) {
+  if (configuredApiKey && configuredApiKey !== apiKey) {
+    throw new Error("Google Maps was already initialized with a different API key.");
+  }
+  if (!configuredApiKey) {
+    setOptions({ key: apiKey, v: "weekly", region: "IN" });
+    configuredApiKey = apiKey;
+  }
+}
+
+function formatDuration(milliseconds?: number) {
+  if (!Number.isFinite(milliseconds) || !milliseconds) return "ETA unavailable";
+  const minutes = Math.max(1, Math.round(milliseconds / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return hours > 0 ? `${hours} hr${hours === 1 ? "" : "s"}${remainingMinutes ? ` ${remainingMinutes} min` : ""}` : `${minutes} min`;
+}
+
+export default function RouteMap({ apiKey, vendorName, origin, destination, routeRequestId, onRouteSummary, onRouteLoading, onRouteError }: RouteMapProps) {
+  const mapElement = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    let map: google.maps.Map | undefined;
+    let routeLine: google.maps.Polyline | undefined;
+    const markers: google.maps.marker.AdvancedMarkerElement[] = [];
+
+    async function initialize() {
+      try {
+        configureGoogleMaps(apiKey);
+        const [maps, routes, markerLibrary] = await Promise.all([
+          importLibrary("maps"),
+          importLibrary("routes"),
+          importLibrary("marker"),
+        ]);
+        if (!active || !mapElement.current) return;
+
+        const vendorPoint = { lat: destination.latitude, lng: destination.longitude };
+        map = new maps.Map(mapElement.current, {
+          center: vendorPoint,
+          zoom: 15,
+          mapId: "DEMO_MAP_ID",
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: true,
+          gestureHandling: "greedy",
         });
-        return () => { active = false; layers.forEach((layer) => layer.remove()); map?.remove(); };
-    }, [destination.latitude, destination.longitude, geometry, origin.latitude, origin.longitude]);
-    return <div aria-label="Driving route map" className="route-map" ref={mapElement} />;
+        markers.push(new markerLibrary.AdvancedMarkerElement({ map, position: vendorPoint, title: vendorName }));
+
+        if (!origin) {
+          onRouteSummary(null);
+          onRouteLoading(false);
+          return;
+        }
+
+        onRouteLoading(true);
+        onRouteError("");
+        const startPoint = { lat: origin.latitude, lng: origin.longitude };
+        const { routes: routeList } = await routes.Route.computeRoutes({
+          origin: startPoint,
+          destination: vendorPoint,
+          travelMode: "DRIVING",
+          routingPreference: "TRAFFIC_AWARE",
+          departureTime: new Date(),
+          region: "IN",
+          units: google.maps.UnitSystem.METRIC,
+          fields: ["path", "distanceMeters", "durationMillis", "localizedValues"],
+        });
+        if (!active) return;
+        const route = routeList?.[0];
+        if (!route?.path?.length) throw new Error("Google Maps could not find a driving route to this vendor.");
+
+        const path = route.path.map((point) => ({ lat: point.lat, lng: point.lng }));
+        routeLine = new maps.Polyline({ map, path, strokeColor: "#1675e8", strokeOpacity: 0.92, strokeWeight: 6 });
+        markers.push(new markerLibrary.AdvancedMarkerElement({ map, position: startPoint, title: "Your location" }));
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(startPoint);
+        bounds.extend(vendorPoint);
+        path.forEach((point) => bounds.extend(point));
+        map.fitBounds(bounds, { top: 34, right: 34, bottom: 34, left: 34 });
+
+        const distance = route.localizedValues?.distance
+          ?? (route.distanceMeters != null ? `${(route.distanceMeters / 1000).toFixed(1)} km` : "Distance unavailable");
+        const duration = route.localizedValues?.duration ?? formatDuration(route.durationMillis ?? undefined);
+        onRouteSummary({ distance, duration });
+        onRouteLoading(false);
+      } catch (error) {
+        if (!active) return;
+        onRouteLoading(false);
+        onRouteError(error instanceof Error ? error.message : "Directions are unavailable right now.");
+      }
+    }
+
+    if (apiKey) void initialize();
+    else {
+      onRouteLoading(false);
+      onRouteError("Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to enable the embedded map.");
+    }
+
+    return () => {
+      active = false;
+      routeLine?.setMap(null);
+      markers.forEach((marker) => { marker.map = null; });
+      mapElement.current?.replaceChildren();
+    };
+  }, [apiKey, destination.latitude, destination.longitude, onRouteError, onRouteLoading, onRouteSummary, origin?.latitude, origin?.longitude, routeRequestId, vendorName]);
+
+  return <div aria-label="Google map showing the vendor and driving route" className="route-map" ref={mapElement} />;
 }

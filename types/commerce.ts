@@ -58,6 +58,9 @@ export type FeedPost = {
   image: string;
   imageAlt: string;
   likes: number;
+  saves?: number;
+  shares?: number;
+  directionCount?: number;
   publishedAt: string;
   mediaType: "image" | "video";
   mediaUrl?: string;

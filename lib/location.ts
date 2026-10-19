@@ -32,6 +32,14 @@ export function formatDistanceKm(distance: number | null) {
     return distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`;
 }
 
+export function formatTravelTimeKm(distanceKm: number) {
+    const minutes = Math.max(1, Math.ceil(distanceKm * 12)); // Approximate walking pace: 5 km/h.
+    if (minutes < 60) return `${minutes} min away`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes ? `${hours} hr ${remainingMinutes} min away` : `${hours} hr away`;
+}
+
 function text(value: unknown) { return typeof value === "string" ? value.trim() : undefined; }
 
 export function normalizeProviderResult(result: { display_name?: unknown; lat?: unknown; lon?: unknown; address?: Record<string, unknown> }): NormalizedLocation {

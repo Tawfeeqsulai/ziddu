@@ -18,6 +18,7 @@ import {
   MapPin,
   Plus,
   QrCode,
+  Search,
   ShoppingBag,
   Sparkles,
   Store,
@@ -34,11 +35,14 @@ import { useRouter } from "next/navigation";
 import { publishFollowChange } from "@/lib/follow-sync";
 import { UpiQrScanner } from "@/components/features/payment/upi-qr-scanner";
 import { getCurrentLocation } from "@/lib/current-location";
+import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
 
 type DiscoverExperienceProps = {
   data: DiscoveryData;
-  initialLocation?: { city: string | null; locality: string | null };
+  initialLocation?: { city: string | null; locality: string | null; latitude: number | null; longitude: number | null };
 };
+type ActiveLocation = { city: string | null; locality: string | null; latitude?: number | null; longitude?: number | null; address?: string };
+type PlaceResult = { address?: string; locality?: string; city?: string; state?: string; latitude?: number; longitude?: number };
 
 const categoryFilters = ["All", "Food", "Furniture", "Electronics", "Cloths"] as const;
 type CategoryFilter = (typeof categoryFilters)[number];
@@ -93,35 +97,72 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
   const [showAllShops, setShowAllShops] = useState(false);
   const [interactionError, setInteractionError] = useState("");
   const [showUpiScanner, setShowUpiScanner] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(initialLocation);
+  const [currentLocation, setCurrentLocation] = useState<ActiveLocation | undefined>(initialLocation);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationRadius, setLocationRadius] = useState(10);
+  const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
+  const [placeSearchBusy, setPlaceSearchBusy] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationError, setLocationError] = useState("");
 
-  async function updateCurrentLocation() {
+  useEffect(() => {
+    try {
+      const radius = Number(window.localStorage.getItem("ziddu:location-radius"));
+      if (Number.isFinite(radius) && radius >= 1) setLocationRadius(Math.min(100, radius));
+    } catch {
+      // Keep the default radius when storage is unavailable.
+    }
+  }, []);
+
+  async function saveLocation(location: ActiveLocation) {
     setLocationBusy(true);
     setLocationError("");
     try {
-      const location = await getCurrentLocation();
-      setCurrentLocation({ city: location.city ?? null, locality: location.locality ?? null });
       const response = await fetch("/api/location/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(location),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...location, locality: location.locality ?? undefined, city: location.city ?? undefined }),
       });
       const result = await response.json().catch(() => null) as { message?: string } | null;
-      if (!response.ok) {
-        setLocationError(result?.message ?? "Location found, but it could not be saved to your account.");
-        return;
-      }
+      if (!response.ok) throw new Error(result?.message ?? "This location could not be saved.");
+      setCurrentLocation(location);
+      setLocationPickerOpen(false);
       router.refresh();
     } catch (cause) {
+      setLocationError(cause instanceof Error ? cause.message : "This location could not be saved.");
+    } finally { setLocationBusy(false); }
+  }
+
+  async function updateCurrentLocation() {
+    try {
+      const location = await getCurrentLocation();
+      await saveLocation({ ...location, city: location.city ?? null, locality: location.locality ?? null });
+    } catch (cause) {
       setLocationError(cause instanceof Error ? cause.message : "We couldn't determine your location. Try again or enter your area manually.");
-    } finally {
-      setLocationBusy(false);
     }
   }
 
   const locationLabel = [currentLocation?.locality, currentLocation?.city].filter(Boolean).join(", ") || "Set your location";
+  const locationChoices = useMemo(() => Array.from(new Map(data.shops
+    .filter((shop) => (shop.area || shop.city) && !/latitude|longitude/i.test(`${shop.area} ${shop.city}`))
+    .map((shop) => [`${shop.area}|${shop.city}`, shop])).values())
+    .filter((shop) => `${shop.area} ${shop.city}`.toLowerCase().includes(locationQuery.trim().toLowerCase())), [data.shops, locationQuery]);
+
+  useEffect(() => {
+    const query = locationQuery.trim();
+    if (!locationPickerOpen || query.length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setPlaceSearchBusy(true);
+      try {
+        const response = await fetch(`/api/location/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const result = await response.json() as { locations?: PlaceResult[] };
+        setPlaceResults(Array.isArray(result.locations) ? result.locations : []);
+      } catch { if (!controller.signal.aborted) setPlaceResults([]); }
+      finally { if (!controller.signal.aborted) setPlaceSearchBusy(false); }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [locationPickerOpen, locationQuery]);
 
   useEffect(() => {
     const apply = (change: { shopId: string; active: boolean }) => {
@@ -143,19 +184,26 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
   const filteredShops = useMemo(() => {
     const matchingShops = data.shops.filter((shop) => {
       const matchesCategory = categoryMatches(activeCategory, shop.category);
-      return matchesCategory;
-    });
+      const distance = haversineDistanceKm(currentLocation ?? {}, shop);
+      return matchesCategory && (distance == null || distance <= locationRadius);
+    }).sort((a, b) => (haversineDistanceKm(currentLocation ?? {}, a) ?? Infinity) - (haversineDistanceKm(currentLocation ?? {}, b) ?? Infinity));
     return showAllShops ? matchingShops : matchingShops.slice(0, 3);
-  }, [activeCategory, data.shops, showAllShops]);
+  }, [activeCategory, currentLocation, data.shops, locationRadius, showAllShops]);
 
   const filteredPosts = useMemo(() => {
-    return data.posts.filter((post) => {
+    const filtered = data.posts.filter((post) => {
       const shop = shopForPost(post, data.shops);
       const matchesCategory = postMatchesCategory(activeCategory, post, shop.category);
       const matchesFollowing = activeTab !== "Following" || following.includes(shop.id);
-      return matchesCategory && matchesFollowing;
+      const distance = haversineDistanceKm(currentLocation ?? {}, shop);
+      return matchesCategory && matchesFollowing && (distance == null || distance <= locationRadius);
     });
-  }, [activeCategory, activeTab, data.posts, data.shops, following]);
+    return filtered.sort((a, b) => {
+      const shopA = data.shops.find((shop) => shop.id === a.shopId);
+      const shopB = data.shops.find((shop) => shop.id === b.shopId);
+      return (haversineDistanceKm(currentLocation ?? {}, shopA ?? {}) ?? Infinity) - (haversineDistanceKm(currentLocation ?? {}, shopB ?? {}) ?? Infinity);
+    });
+  }, [activeCategory, activeTab, currentLocation, data.posts, data.shops, following, locationRadius]);
 
   async function toggleInteraction(action: "like" | "save" | "follow", id: string) {
     setInteractionError("");
@@ -167,6 +215,7 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
       const response = await fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, active: !wasActive }) });
       if (response.status === 401) { router.push("/login"); throw new Error("Sign in required"); }
       if (!response.ok) throw new Error("Interaction unavailable");
+      window.dispatchEvent(new Event("ziddu:feed-mutation"));
       if (action === "follow") {
         const result = await response.json() as { active?: boolean; followerCount?: number };
         if (typeof result.active === "boolean" && typeof result.followerCount === "number") {
@@ -203,9 +252,9 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
         <a className="brand-lockup" href="#top" aria-label="ZIDDU home">
           <BrandLogo alt="" />
         </a>
-        <button aria-label="Use my current location" className="location-control" disabled={locationBusy} onClick={() => { void updateCurrentLocation(); }} type="button">
+        <button aria-label="Choose your location" className="location-control" disabled={locationBusy} onClick={() => setLocationPickerOpen(true)} type="button">
           <span className="location-pin"><MapPin size={16} strokeWidth={2.3} /></span>
-          <span className="location-copy"><small>{locationBusy ? "FINDING YOUR LOCATION" : "YOUR NEIGHBORHOOD"}</small><strong>{locationLabel}</strong>{locationError && <span aria-live="polite" className="location-status" role="alert" title={locationError}>{locationError}</span>}</span>
+          <span className="location-copy"><strong>{locationLabel}</strong>{locationError && <span aria-live="polite" className="location-status" role="alert" title={locationError}>{locationError}</span>}</span>
           <ChevronDown size={15} />
         </button>
         <nav aria-label="Desktop navigation" className="desktop-nav">
@@ -225,7 +274,7 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
           <SessionControl />
         </div>
         <div className="home-mobile-actions">
-          <button aria-label="Notifications" className="home-mobile-icon" type="button"><Bell size={17} /></button>
+          {/* <button aria-label="Notifications" className="home-mobile-icon" type="button"><Bell size={17} /></button> */}
           <SessionControl iconButton />
         </div>
       </header>
@@ -297,8 +346,10 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
                 {filteredPosts.length === 0 && <EmptyState description="New local businesses and offers will appear here." title="Nothing nearby yet" />}
                 {filteredPosts.map((post) => {
                   const shop = shopForPost(post, data.shops);
+                  const distance = formatDistanceKm(haversineDistanceKm(currentLocation ?? {}, shop));
                   return (
                     <PostCard
+                      distanceLabel={distance ? `${distance} away` : undefined}
                       followed={following.includes(shop.id)}
                       key={post.id}
                       liked={likedPosts.includes(post.id)}
@@ -362,6 +413,22 @@ export default function DiscoverExperience({ data, initialLocation }: DiscoverEx
         </section>
       </div>}
       {showUpiScanner && <UpiQrScanner onClose={() => setShowUpiScanner(false)} />}
+      {locationPickerOpen && <div className="modal-backdrop location-picker-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setLocationPickerOpen(false); }}>
+        <section aria-labelledby="location-picker-title" aria-modal="true" className="location-picker" role="dialog">
+          <button aria-label="Close location picker" className="close-modal" onClick={() => setLocationPickerOpen(false)} type="button"><X size={18} /></button>
+          <span className="section-kicker">DISCOVER NEARBY</span><h2 id="location-picker-title">Choose your location</h2>
+          <label className="location-search"><Search aria-hidden="true" size={16} /><input aria-label="Search locations" onChange={(event) => { setLocationQuery(event.target.value); if (event.target.value.trim().length < 2) setPlaceResults([]); }} placeholder="Search any area or city" value={locationQuery} /></label>
+          <button className="location-option" disabled={locationBusy} onClick={() => { void updateCurrentLocation(); }} type="button"><MapPin size={17} /><span><strong>Use my current location</strong><small>Find shops around you</small></span></button>
+          <div className="location-radius-picker"><label htmlFor="location-radius">Nearby radius <strong>{locationRadius} km</strong></label><input aria-label="Nearby radius in kilometers" id="location-radius" max="100" min="1" onChange={(event) => { const radius = Number(event.target.value); setLocationRadius(radius); window.localStorage.setItem("ziddu:location-radius", String(radius)); }} type="range" value={locationRadius} /></div>
+          <div className="location-option-list">
+            {placeResults.map((place, index) => <button className="location-option" key={`${place.latitude}:${place.longitude}:${index}`} onClick={() => { void saveLocation({ locality: place.locality || null, city: place.city || null, latitude: place.latitude, longitude: place.longitude, address: place.address }); }} type="button"><MapPin size={17} /><span><strong>{place.locality || place.address?.split(",")[0] || place.city || "Selected location"}</strong><small>{[place.locality && place.city && place.locality !== place.city ? place.locality : null, place.city, place.state].filter(Boolean).join(", ") || place.address}</small></span></button>)}
+            {locationChoices.map((shop) => <button className="location-option" key={`${shop.area}|${shop.city}`} onClick={() => { void saveLocation({ locality: shop.area || null, city: shop.city || null, latitude: shop.latitude, longitude: shop.longitude, address: shop.address }); }} type="button"><MapPin size={17} /><span><strong>{shop.area || shop.city}</strong><small>{[shop.area && shop.city && shop.area !== shop.city ? shop.area : null, shop.city].filter(Boolean).join(", ")}</small></span></button>)}
+            {placeSearchBusy && <p className="location-search-empty">Searching locations…</p>}
+            {!placeSearchBusy && locationQuery.trim().length >= 2 && placeResults.length === 0 && locationChoices.length === 0 && <p className="location-search-empty">No locations found. Try another area or city.</p>}
+          </div>
+          {locationError && <p className="location-picker-error" role="alert">{locationError}</p>}
+        </section>
+      </div>}
     </div>
   );
 }

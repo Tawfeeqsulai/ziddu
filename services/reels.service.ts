@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { readStringArray } from "@/lib/db/json";
 import { getDiscoveryData } from "@/services/discovery.service";
 import type { FeedPost, Shop } from "@/types/commerce";
+import { mergeHashtags } from "@/lib/hashtag";
 
 export const REELS_PAGE_SIZE = 6;
 export type ReelItem = { post: FeedPost; shop: Shop; followed: boolean };
@@ -67,8 +68,8 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
     const localWhere = user?.city ? { ...baseWhere, shop: { location: { city: { contains: user.city } } } } : baseWhere;
     const include = {
       shop: { include: { location: true, follows: { where: { userId }, select: { id: true } } } },
-      offer: { include: { product: { select: { priceInr: true } } } },
-      _count: { select: { likes: true } },
+      offer: { include: { product: { select: { priceInr: true, name: true } } } },
+      _count: { select: { likes: true, saves: true } },
       likes: { where: { userId }, select: { id: true } },
       saves: { where: { userId }, select: { id: true } },
     };
@@ -94,8 +95,8 @@ export async function getReels(userId: string, page = 1, postId?: string): Promi
         followed: record.shop.follows.length > 0,
         post: {
           id: record.id, shopId: record.shopId, kind: record.isOfferIncluded ? "offer" as const : "reel" as const, title: record.title, description: record.description,
-          image: record.thumbnailUrl ?? record.mediaUrl, imageAlt: record.altText ?? record.title, likes: record._count.likes, publishedAt: record.publishedAt.toISOString(), mediaType: "video" as const,
-          mediaUrl: record.mediaUrl, hashtags: readStringArray(record.hashtags), price: values.priceInr ?? record.offer?.product?.priceInr, originalPrice: values.originalPriceInr, badge: values.badge, offerValidUntil: record.offer?.validityTo.toISOString(),
+          image: record.thumbnailUrl ?? record.mediaUrl, imageAlt: record.altText ?? record.title, likes: record._count.likes, saves: record._count.saves, publishedAt: record.publishedAt.toISOString(), mediaType: "video" as const,
+          mediaUrl: record.mediaUrl, hashtags: mergeHashtags(readStringArray(record.hashtags), record.offer?.product?.name), price: values.priceInr ?? record.offer?.product?.priceInr, originalPrice: values.originalPriceInr, badge: values.badge ?? (record.isOfferIncluded ? record.title : undefined), offerValidUntil: record.offer?.validityTo.toISOString(),
           liked: record.likes.length > 0, saved: record.saves.length > 0,
         } satisfies FeedPost,
       };

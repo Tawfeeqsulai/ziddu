@@ -13,11 +13,15 @@ type PostCardProps = PostCoreProps;
 export default function PostCard(props: PostCardProps) {
   const { post } = props;
   const [shareLabel, setShareLabel] = useState("");
+  const [localShareTaps, setLocalShareTaps] = useState(0);
 
   async function sharePost() {
-    const route = post.mediaType === "video" ? "/reels" : "/";
-    const url = `${window.location.origin}${route}?post=${encodeURIComponent(post.id)}`;
-    const text = `Check out this ${post.mediaType === "video" ? "Reel" : "post"} from ${props.shop.name} in ${props.shop.area}, ${props.shop.city}.`;
+    const url = `${window.location.origin}/shops/${encodeURIComponent(props.shop.id)}`;
+    const text = `Discover ${props.shop.name}${props.shop.area ? ` in ${props.shop.area}` : ""} on ZIDDU.`;
+    setLocalShareTaps((count) => count + 1);
+    void fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "share", postId: post.id, shopId: props.shop.id }) })
+      .then((response) => { if (!response.ok) throw new Error("Share count unavailable"); window.dispatchEvent(new Event("ziddu:feed-mutation")); })
+      .catch(() => setLocalShareTaps((count) => Math.max(0, count - 1)));
     try {
       if (navigator.share) {
         await navigator.share({ text, title: post.title, url });
@@ -33,6 +37,7 @@ export default function PostCard(props: PostCardProps) {
 
   const engagement: PostEngagement = {
     shareLabel,
+    shareCount: (post.shares ?? 0) + localShareTaps,
     onShare: sharePost,
   };
   const presentation = { ...props, engagement };
