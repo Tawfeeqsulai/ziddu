@@ -6,17 +6,16 @@ import type { Shop } from "@/types/commerce";
 import RouteMap from "@/components/features/directions/route-map";
 import { BackButton } from "@/components/ui/back-button";
 
-type DirectionsExperienceProps = { shop: Shop };
+type DirectionsExperienceProps = { apiKey: string; shop: Shop };
 type Coordinates = { latitude: number; longitude: number };
 type RouteSummary = { distance: string; duration: string };
 
-export default function DirectionsExperience({ shop }: DirectionsExperienceProps) {
+export default function DirectionsExperience({ apiKey, shop }: DirectionsExperienceProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [route, setRoute] = useState<RouteSummary | null>(null);
   const [origin, setOrigin] = useState<Coordinates | null>(null);
   const [routeRequestId, setRouteRequestId] = useState(0);
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const destinationLabel = [shop.area, shop.city].filter(Boolean).join(", ") || shop.address || shop.name;
   const destination = shop.latitude != null && shop.longitude != null
     ? { latitude: shop.latitude, longitude: shop.longitude }
@@ -64,7 +63,7 @@ export default function DirectionsExperience({ shop }: DirectionsExperienceProps
       />}
       {!destination && <div className="directions-map-unavailable">The vendor needs to add latitude and longitude before a map route can be shown.</div>}
       <div className="directions-page-actions">
-        <button className="confirm-button" disabled={loading || !destination} onClick={findRoute} type="button"><Navigation size={15} />{loading ? "Finding route..." : route ? "Refresh route" : "Use my location"}</button>
+        <button className="confirm-button" disabled={loading || !destination} onClick={findRoute} type="button"><Navigation size={15} />{loading ? "Finding route..." : route ? "Refresh route" : "Get directions"}</button>
         {route && <span className="directions-route-summary"><strong>{route.duration}</strong><span>{route.distance}</span><small>Driving · live traffic estimate</small></span>}
         <a className="directions-google-link" href={mapsUrl} rel="noreferrer" target="_blank"><ExternalLink size={14} /> Open Google Maps</a>
       </div>

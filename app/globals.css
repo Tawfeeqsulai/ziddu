@@ -15683,3 +15683,122 @@ body:has(.menu-order-flow)::before { background: rgba(3, 10, 22, .68); }
   .explore-page .explore-vendor-offer-image { min-width: 94px; min-height: 106px; }
   .explore-page .explore-vendor-offer-title { font-size: 13px; }
 }
+
+/* Shared vendor post: /posts/[id] */
+.shared-post-page {
+  min-height: 100svh;
+  padding-bottom: 40px;
+  background: var(--ziddu-background);
+  color: var(--ziddu-navy);
+}
+
+.shared-post-card {
+  display: grid;
+  gap: 14px;
+  width: min(100% - 32px, var(--ziddu-post-max-width));
+  margin: 0 auto;
+  padding: 16px;
+  border: 1px solid var(--ziddu-border);
+  border-radius: var(--ziddu-radius-lg);
+  background: var(--ziddu-surface);
+  box-shadow: var(--ziddu-shadow);
+}
+
+.shared-post-shop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.shared-post-shop > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shared-post-shop strong {
+  font-size: 15px;
+}
+
+.shared-post-shop span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ziddu-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.shared-post-logo {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--ziddu-border);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.shared-post-logo-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--ziddu-cyan);
+  color: var(--ziddu-blue);
+}
+
+.shared-post-media {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--ziddu-radius-md);
+  background: var(--ziddu-cyan);
+}
+
+.shared-post-offer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--ziddu-radius-md);
+  background: color-mix(in srgb, var(--ziddu-green) 12%, var(--ziddu-surface));
+  color: var(--ziddu-green);
+}
+
+.shared-post-offer > div {
+  display: grid;
+  gap: 2px;
+}
+
+.shared-post-offer strong {
+  color: var(--ziddu-navy);
+  font-size: 15px;
+}
+
+.shared-post-offer span {
+  color: var(--ziddu-muted);
+  font-size: 12px;
+}
+
+.shared-post-offer-ended {
+  background: var(--ziddu-background);
+  color: var(--ziddu-muted);
+}
+
+.shared-post-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ziddu-muted);
+  font-size: 12px;
+}
+
+.shared-post-visit {
+  padding: 9px 16px;
+  border-radius: var(--ziddu-radius-pill);
+  background: var(--ziddu-blue);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}

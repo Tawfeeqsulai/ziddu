@@ -7,6 +7,7 @@ import {
   type PostCoreProps,
   type PostEngagement,
 } from "@/components/features/discover/post-components";
+import { getPostSharePath } from "@/lib/post-share-id";
 
 type PostCardProps = PostCoreProps;
 
@@ -16,8 +17,9 @@ export default function PostCard(props: PostCardProps) {
   const [localShareTaps, setLocalShareTaps] = useState(0);
 
   async function sharePost() {
-    const url = `${window.location.origin}/shops/${encodeURIComponent(props.shop.id)}`;
-    const text = `Discover ${props.shop.name}${props.shop.area ? ` in ${props.shop.area}` : ""} on ZIDDU.`;
+    const sharePath = getPostSharePath(post.id) ?? `/shops/${encodeURIComponent(props.shop.id)}`;
+    const url = new URL(sharePath, window.location.origin).toString();
+    const text = `View ${post.title} from ${props.shop.name} on ZIDDU.`;
     setLocalShareTaps((count) => count + 1);
     void fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "share", postId: post.id, shopId: props.shop.id }) })
       .then((response) => { if (!response.ok) throw new Error("Share count unavailable"); window.dispatchEvent(new Event("ziddu:feed-mutation")); })

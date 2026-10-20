@@ -7,6 +7,7 @@ import { normalizeVendorLocation } from "@/lib/vendor-location";
 import { mergeHashtags } from "@/lib/hashtag";
 import { formatOfferLabel } from "@/lib/offer-label";
 import { offerPricing, type OfferPricing } from "@/lib/offer-pricing";
+import { getExternalLikesForPosts } from "@/services/likes-api.service";
 
 type OfferValue = { priceInr?: number; originalPriceInr?: number; badge?: string };
 
@@ -110,10 +111,11 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
     feedInteraction?: typeof prisma.feedInteraction;
     feedShare?: typeof prisma.feedShare;
   };
-  const [interactions, shares] = postIds.length > 0 ? await Promise.all([
+  const [interactions, shares, externalLikes] = postIds.length > 0 ? await Promise.all([
     engagementClient.feedInteraction ? engagementClient.feedInteraction.findMany({ where: { targetType: "POST", targetId: { in: postIds }, active: true }, select: { targetId: true, userId: true, action: true } }).catch(() => []) : Promise.resolve([]),
     engagementClient.feedShare ? engagementClient.feedShare.groupBy({ by: ["targetId"], where: { targetType: "POST", targetId: { in: postIds } }, _count: { _all: true } }).catch(() => []) : Promise.resolve([]),
-  ]) : [[], []];
+    getExternalLikesForPosts(userId, postIds),
+  ]) : [[], [], new Map()];
   const engagementByPost = new Map<string, { likes: number; saves: number; directions: number; liked: boolean; saved: boolean }>();
   for (const interaction of interactions) {
     const summary = engagementByPost.get(interaction.targetId) ?? { likes: 0, saves: 0, directions: 0, liked: false, saved: false };
@@ -147,12 +149,13 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
     const targetType = post.offer?.offerTargetType?.toUpperCase();
     const productName = post.offer?.offerTargetId && (!targetType || /ITEM|PRODUCT/.test(targetType)) ? record.menuItems.find((item) => item.id === post.offer?.offerTargetId)?.productName : undefined;
     const engagement = engagementByPost.get(String(post.id));
+    const externalLike = externalLikes.get(String(post.id));
     return {
       id: String(post.id), shopId: String(record.id), kind: post.isOfferIncluded ? "offer" as const : mediaType === "video" ? "reel" as const : "post" as const,
-      title, description: `${name} shared a new ${post.postCategory || "post"}.`, image: post.postUrl, imageAlt: title, likes: engagement?.likes ?? 0, saves: engagement?.saves ?? 0, shares: shareCounts.get(String(post.id)) ?? 0, directionCount: engagement?.directions ?? 0,
+      title, description: `${name} shared a new ${post.postCategory || "post"}.`, image: post.postUrl, imageAlt: title, likes: externalLike?.likeCount ?? engagement?.likes ?? 0, saves: engagement?.saves ?? 0, shares: shareCounts.get(String(post.id)) ?? 0, directionCount: engagement?.directions ?? 0,
       publishedAt: (post.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? post.postUrl : undefined,
       hashtags: mergeHashtags(post.postCategory ? [`#${post.postCategory.replace(/\s+/g, "")}`] : [], productName), price: values.priceInr,
-      originalPrice: values.originalPriceInr, badge: post.isOfferIncluded ? formatOfferLabel({ offerType: post.offer?.offerType, offerValue: post.offer?.offerValue, badge: values.badge, productName, price: values.priceInr, originalPrice: values.originalPriceInr, category: post.postCategory }) : undefined, offerValidUntil: post.offer?.validityTo?.toISOString(), liked: engagement?.liked ?? false, saved: engagement?.saved ?? false,
+      originalPrice: values.originalPriceInr, badge: post.isOfferIncluded ? formatOfferLabel({ offerType: post.offer?.offerType, offerValue: post.offer?.offerValue, badge: values.badge, productName, price: values.priceInr, originalPrice: values.originalPriceInr, category: post.postCategory }) : undefined, offerValidUntil: post.offer?.validityTo?.toISOString(), liked: externalLike?.liked ?? engagement?.liked ?? false, saved: engagement?.saved ?? false,
     };
   });
   const offers: ShopOffer[] = record.offers.map((offer) => {

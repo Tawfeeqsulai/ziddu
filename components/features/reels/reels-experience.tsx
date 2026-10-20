@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from "@/components/ui/states";
 import { SocialActions } from "@/components/ui/social-actions";
 import { DirectionsButton } from "@/components/ui/directions-button";
 import ReelVideoPlayer from "@/components/features/reels/reel-video-player";
+import { getPostSharePath } from "@/lib/post-share-id";
 import type { ReelItem, ReelsResult } from "@/services/reels.service";
 
 type ReelsExperienceProps = { initial: ReelsResult; authenticated: boolean };
@@ -59,7 +60,8 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
   }
 
   async function share(postId: string, shopId: string, shopName: string) {
-    const url = `${window.location.origin}/shops/${encodeURIComponent(shopId)}`;
+    const sharePath = getPostSharePath(postId) ?? `/shops/${encodeURIComponent(shopId)}`;
+    const url = new URL(sharePath, window.location.origin).toString();
     setShareCounts((current) => ({ ...current, [postId]: (current[postId] ?? 0) + 1 }));
     void fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "share", postId, shopId }) })
       .then((response) => { if (!response.ok) throw new Error("Share count unavailable"); window.dispatchEvent(new Event("ziddu:feed-mutation")); })

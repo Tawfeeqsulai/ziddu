@@ -29,12 +29,12 @@ function configureGoogleMaps(apiKey: string) {
   }
 }
 
-function formatDuration(milliseconds?: number) {
-  if (!Number.isFinite(milliseconds) || !milliseconds) return "ETA unavailable";
-  const minutes = Math.max(1, Math.round(milliseconds / 60_000));
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return hours > 0 ? `${hours} hr${hours === 1 ? "" : "s"}${remainingMinutes ? ` ${remainingMinutes} min` : ""}` : `${minutes} min`;
+function formatDuration(minutes?: number | null) {
+  if (!Number.isFinite(minutes) || !minutes) return "ETA unavailable";
+  const roundedMinutes = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainingMinutes = roundedMinutes % 60;
+  return hours > 0 ? `${hours} hr${hours === 1 ? "" : "s"}${remainingMinutes ? ` ${remainingMinutes} min` : ""}` : `${roundedMinutes} min`;
 }
 
 export default function RouteMap({ apiKey, vendorName, origin, destination, routeRequestId, onRouteSummary, onRouteLoading, onRouteError }: RouteMapProps) {
@@ -49,9 +49,8 @@ export default function RouteMap({ apiKey, vendorName, origin, destination, rout
     async function initialize() {
       try {
         configureGoogleMaps(apiKey);
-        const [maps, routes, markerLibrary] = await Promise.all([
+        const [maps, markerLibrary] = await Promise.all([
           importLibrary("maps"),
-          importLibrary("routes"),
           importLibrary("marker"),
         ]);
         if (!active || !mapElement.current) return;
@@ -77,21 +76,25 @@ export default function RouteMap({ apiKey, vendorName, origin, destination, rout
         onRouteLoading(true);
         onRouteError("");
         const startPoint = { lat: origin.latitude, lng: origin.longitude };
-        const { routes: routeList } = await routes.Route.computeRoutes({
-          origin: startPoint,
-          destination: vendorPoint,
-          travelMode: "DRIVING",
-          routingPreference: "TRAFFIC_AWARE",
-          departureTime: new Date(),
-          region: "IN",
-          units: google.maps.UnitSystem.METRIC,
-          fields: ["path", "distanceMeters", "durationMillis", "localizedValues"],
+        const response = await fetch("/api/directions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origin, destination }),
         });
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/json")) {
+          throw new Error(`Directions endpoint returned HTTP ${response.status} instead of JSON. Restart the local app or deploy the latest directions API.`);
+        }
+        const result = await response.json() as {
+          message?: string;
+          route?: { distanceKm: number; durationMinutes: number | null; path: Coordinates[] };
+        };
+        if (!response.ok) throw new Error(result.message ?? "Google directions are temporarily unavailable.");
         if (!active) return;
-        const route = routeList?.[0];
-        if (!route?.path?.length) throw new Error("Google Maps could not find a driving route to this vendor.");
+        const route = result.route;
+        if (!route?.path.length) throw new Error("Google Maps could not find a driving route to this vendor.");
 
-        const path = route.path.map((point) => ({ lat: point.lat, lng: point.lng }));
+        const path = route.path.map((point) => ({ lat: point.latitude, lng: point.longitude }));
         routeLine = new maps.Polyline({ map, path, strokeColor: "#1675e8", strokeOpacity: 0.92, strokeWeight: 6 });
         markers.push(new markerLibrary.AdvancedMarkerElement({ map, position: startPoint, title: "Your location" }));
         const bounds = new google.maps.LatLngBounds();
@@ -100,9 +103,8 @@ export default function RouteMap({ apiKey, vendorName, origin, destination, rout
         path.forEach((point) => bounds.extend(point));
         map.fitBounds(bounds, { top: 34, right: 34, bottom: 34, left: 34 });
 
-        const distance = route.localizedValues?.distance
-          ?? (route.distanceMeters != null ? `${(route.distanceMeters / 1000).toFixed(1)} km` : "Distance unavailable");
-        const duration = route.localizedValues?.duration ?? formatDuration(route.durationMillis ?? undefined);
+        const distance = `${route.distanceKm.toFixed(1)} km`;
+        const duration = formatDuration(route.durationMinutes);
         onRouteSummary({ distance, duration });
         onRouteLoading(false);
       } catch (error) {
@@ -115,7 +117,7 @@ export default function RouteMap({ apiKey, vendorName, origin, destination, rout
     if (apiKey) void initialize();
     else {
       onRouteLoading(false);
-      onRouteError("Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to enable the embedded map.");
+      onRouteError("Add GOOGLE_MAPS_API_KEY to enable the embedded map.");
     }
 
     return () => {

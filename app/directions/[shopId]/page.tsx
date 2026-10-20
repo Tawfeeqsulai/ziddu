@@ -8,5 +8,5 @@ export default async function DirectionsPage({ params }: { params: Promise<{ sho
     const user = await getCurrentUser();
     const profile = await getShopProfile(shopId, user?.id);
     if (!profile) notFound();
-    return <DirectionsExperience shop={profile.shop} />;
+    return <DirectionsExperience apiKey={process.env.GOOGLE_MAPS_API_KEY ?? ""} shop={profile.shop} />;
 }

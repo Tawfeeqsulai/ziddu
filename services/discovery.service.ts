@@ -7,6 +7,7 @@ import { normalizeVendorLocation } from "@/lib/vendor-location";
 import { mergeHashtags } from "@/lib/hashtag";
 import { formatOfferLabel } from "@/lib/offer-label";
 import { getVendorPostsFromApi } from "@/services/vendor-posts-api.service";
+import { getExternalLikesForPosts } from "@/services/likes-api.service";
 
 type OfferValue = { priceInr?: number; originalPriceInr?: number; badge?: string };
 
@@ -119,10 +120,11 @@ async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
     feedInteraction?: typeof prisma.feedInteraction;
     feedShare?: typeof prisma.feedShare;
   };
-  const [menuItems, interactions, shares] = await Promise.all([
+  const [menuItems, interactions, shares, externalLikes] = await Promise.all([
     vendorIds.length > 0 ? sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: { in: vendorIds } }, select: { id: true, productName: true } }) : Promise.resolve([]),
     postIds.length > 0 && engagementClient.feedInteraction ? engagementClient.feedInteraction.findMany({ where: { targetType: "POST", targetId: { in: postIds }, active: true }, select: { targetId: true, userId: true, action: true } }).catch(() => []) : Promise.resolve([]),
     postIds.length > 0 && engagementClient.feedShare ? engagementClient.feedShare.groupBy({ by: ["targetId"], where: { targetType: "POST", targetId: { in: postIds } }, _count: { _all: true } }).catch(() => []) : Promise.resolve([]),
+    getExternalLikesForPosts(userId, postIds),
   ]);
   const engagementByPost = new Map<string, { likes: number; saves: number; directions: number; liked: boolean; saved: boolean }>();
   for (const interaction of interactions) {
@@ -154,14 +156,15 @@ async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
     const targetType = record.offer?.offerTargetType?.toUpperCase();
     const productName = record.offer?.offerTargetId && (!targetType || /ITEM|PRODUCT/.test(targetType)) ? productNames.get(record.offer.offerTargetId) : undefined;
     const engagement = engagementByPost.get(String(record.id));
+    const externalLike = externalLikes.get(String(record.id));
     const title = `${record.vendor.businessName || "Local vendor"} ${record.postCategory || "update"}`;
     return {
       id: String(record.id), shopId: String(record.vendorId), kind: record.isOfferIncluded ? "offer" as const : mediaType === "video" ? "reel" as const : "post" as const,
       title, description: `${record.vendor.businessName || "Local vendor"} shared a new ${record.postCategory || "post"}.`, image: record.postUrl, imageAlt: title,
-      likes: engagement?.likes ?? 0, saves: engagement?.saves ?? 0, shares: shareCounts.get(String(record.id)) ?? 0, directionCount: engagement?.directions ?? 0,
+      likes: externalLike?.likeCount ?? engagement?.likes ?? 0, saves: engagement?.saves ?? 0, shares: shareCounts.get(String(record.id)) ?? 0, directionCount: engagement?.directions ?? 0,
       publishedAt: (record.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? record.postUrl : undefined,
       hashtags: mergeHashtags(record.postCategory ? [record.postCategory.startsWith("#") ? record.postCategory : `#${record.postCategory.replace(/\s+/g, "")}`] : [], productName), price: offerValue.priceInr,
-      originalPrice: offerValue.originalPriceInr, badge: record.isOfferIncluded ? formatOfferLabel({ offerType: record.offer?.offerType, offerValue: record.offer?.offerValue, badge: offerValue.badge, productName, price: offerValue.priceInr, originalPrice: offerValue.originalPriceInr, category: record.postCategory }) : undefined, offerValidUntil: record.offer?.validityTo?.toISOString(), liked: engagement?.liked ?? false, saved: engagement?.saved ?? false,
+      originalPrice: offerValue.originalPriceInr, badge: record.isOfferIncluded ? formatOfferLabel({ offerType: record.offer?.offerType, offerValue: record.offer?.offerValue, badge: offerValue.badge, productName, price: offerValue.priceInr, originalPrice: offerValue.originalPriceInr, category: record.postCategory }) : undefined, offerValidUntil: record.offer?.validityTo?.toISOString(), liked: externalLike?.liked ?? engagement?.liked ?? false, saved: engagement?.saved ?? false,
     } satisfies DiscoveryData["posts"][number];
   });
   return { shops, posts, stories: [], purchases: [] };

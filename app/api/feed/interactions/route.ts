@@ -4,6 +4,7 @@ import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { getCurrentUser } from "@/lib/auth/session";
 import { postInteractionInputSchema, followInputSchema } from "@/lib/validation/domain";
 import { getVendorPostsFromApi } from "@/services/vendor-posts-api.service";
+import { getExternalLikesForPosts, getSharedLikeUserId, updateExternalLike } from "@/services/likes-api.service";
 import { z } from "zod";
 
 const interactionSchema = z.object({
@@ -112,6 +113,19 @@ export async function POST(request: Request) {
     }
 
     if (sharedPost) {
+      if (action === "like") {
+        const externalUserId = await getSharedLikeUserId(user.id);
+        if (externalUserId === null) {
+          return NextResponse.json({ message: "Add a phone number linked to your vendor account before liking posts." }, { status: 400 });
+        }
+        const currentLikes = await getExternalLikesForPosts(user.id, [databasePostId]);
+        const current = currentLikes.get(databasePostId);
+        const nextActive = active ?? !current?.liked;
+        const updated = await updateExternalLike(sharedPost.id, externalUserId, nextActive);
+        const saveCount = await prisma.feedInteraction.count({ where: { targetType: "POST", targetId: databasePostId, action: "SAVE", active: true } }).catch(() => 0);
+        return NextResponse.json({ active: nextActive, ...(updated ? { likeCount: updated.likeCount } : {}), saveCount });
+      }
+
       const actionKey = action.toUpperCase();
       const uniqueKey = { userId_targetType_targetId_action: { userId: user.id, targetType: "POST", targetId: databasePostId, action: actionKey } };
       const existing = await prisma.feedInteraction.findUnique({ where: uniqueKey });

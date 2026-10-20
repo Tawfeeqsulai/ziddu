@@ -4,6 +4,7 @@ import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
 import { normalizeVendorLocation } from "@/lib/vendor-location";
 import { mergeHashtags } from "@/lib/hashtag";
 import { formatOfferLabel } from "@/lib/offer-label";
+import { getExternalLikesForPosts } from "@/services/likes-api.service";
 import { normalizeBusinessCategory, type DiscoveryData, type FeedPost, type Shop } from "@/types/commerce";
 
 const VENDOR_POSTS_API = "https://zoggy-backend-api.vercel.app/api/vendorposts";
@@ -157,9 +158,10 @@ export async function getVendorPostsFromApi(userId: string): Promise<DiscoveryDa
     feedShare?: typeof prisma.feedShare;
   };
   const postIds = posts.map((post) => post.id);
-  const [interactions, shares] = await Promise.all([
+  const [interactions, shares, externalLikes] = await Promise.all([
     postIds.length && appPrisma.feedInteraction ? appPrisma.feedInteraction.findMany({ where: { targetType: "POST", targetId: { in: postIds }, active: true }, select: { targetId: true, userId: true, action: true } }).catch(() => []) : Promise.resolve([]),
     postIds.length && appPrisma.feedShare ? appPrisma.feedShare.groupBy({ by: ["targetId"], where: { targetType: "POST", targetId: { in: postIds } }, _count: { _all: true } }).catch(() => []) : Promise.resolve([]),
+    getExternalLikesForPosts(userId, postIds),
   ]);
   const engagement = new Map<string, { likes: number; saves: number; directions: number; liked: boolean; saved: boolean }>();
   for (const interaction of interactions) {
@@ -172,11 +174,12 @@ export async function getVendorPostsFromApi(userId: string): Promise<DiscoveryDa
   const shareCounts = new Map(shares.map((share) => [share.targetId, share._count._all]));
   for (const post of posts) {
     const row = engagement.get(post.id);
-    post.likes = row?.likes ?? 0;
+    const externalLike = externalLikes.get(post.id);
+    post.likes = externalLike?.likeCount ?? row?.likes ?? 0;
     post.saves = row?.saves ?? 0;
     post.shares = shareCounts.get(post.id) ?? 0;
     post.directionCount = row?.directions ?? 0;
-    post.liked = row?.liked ?? false;
+    post.liked = externalLike?.liked ?? row?.liked ?? false;
     post.saved = row?.saved ?? false;
   }
 
