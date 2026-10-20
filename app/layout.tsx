@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppNavigation } from "@/components/ui/bottom-navigation";
 import { RealtimeUpdates } from "@/components/ui/realtime-updates";
 import "./globals.css";
+import "./desktop.css";
 
 export const metadata: Metadata = {
   title: "ZIDDU | Good finds, just around the corner",

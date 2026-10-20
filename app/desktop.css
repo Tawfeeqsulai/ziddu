@@ -1,0 +1,891 @@
+/*
+ * Desktop layout (>= 1024px).
+ * Everything here is scoped to wide screens so the mobile and tablet views
+ * defined in globals.css stay exactly as they are.
+ */
+
+@media (min-width: 1024px) {
+  :root {
+    --desktop-sidebar: 220px;
+    --desktop-gutter: 28px;
+    --desktop-card-radius: 16px;
+    --desktop-nav-active: var(--ziddu-blue-deep);
+  }
+
+  [data-theme="dark"] {
+    --desktop-nav-active: #8cc4ff;
+  }
+
+  /* ---------- Global sidebar (the bottom navigation, re-laid out) ---------- */
+
+  .app-navigation-content.has-bottom-navigation {
+    padding-left: var(--desktop-sidebar);
+  }
+
+  .app-navigation-content.has-bottom-navigation:has(.app-splash),
+  .app-navigation-content.has-bottom-navigation:has(.app-route-loading-marker),
+  .app-navigation-content.has-bottom-navigation:has(.shop-loading) {
+    padding-left: 0;
+  }
+
+  .ui-bottom-navigation {
+    position: fixed;
+    z-index: 30;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: var(--desktop-sidebar);
+    padding: 112px 12px 16px;
+    border-right: 1px solid var(--ziddu-border);
+    background: var(--ziddu-surface);
+  }
+
+  .ui-bottom-navigation::before {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 140px;
+    height: 53px;
+    border: 1px solid var(--ziddu-border);
+    border-radius: 12px;
+    background: url("/ziddu-logo.png") center / cover no-repeat;
+    box-shadow: var(--ziddu-shadow-sm);
+    content: "";
+  }
+
+  .ui-bottom-navigation::after {
+    position: absolute;
+    top: 88px;
+    left: 26px;
+    color: var(--ziddu-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.35px;
+    content: "MENU";
+  }
+
+  .app-navigation-content:has(.app-splash) + .ui-bottom-navigation,
+  .app-navigation-content:has(.app-route-loading-marker) + .ui-bottom-navigation,
+  .app-navigation-content:has(.shop-loading) + .ui-bottom-navigation {
+    display: none;
+  }
+
+  .ui-bottom-navigation-surface {
+    display: none;
+  }
+
+  .ui-bottom-navigation button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    min-height: 42px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--ziddu-muted);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .ui-bottom-navigation-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+  }
+
+  .ui-bottom-navigation-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ui-bottom-navigation button:not(.is-ai):hover {
+    background: var(--ziddu-cyan);
+    color: var(--ziddu-navy);
+  }
+
+  .ui-bottom-navigation button.is-active:not(.is-ai) {
+    background: linear-gradient(135deg, rgba(23, 111, 229, .12), rgba(0, 185, 216, .08));
+    color: var(--desktop-nav-active);
+  }
+
+  .ui-bottom-navigation button.is-active:not(.is-ai)::before {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: -12px;
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: var(--ziddu-blue);
+    content: "";
+  }
+
+  .ui-bottom-navigation button.is-active:not(.is-ai) .ui-bottom-navigation-icon {
+    background: linear-gradient(145deg, var(--ziddu-blue), #2e8df0);
+    color: #fff;
+    box-shadow: 0 6px 14px rgba(23, 111, 229, .28);
+  }
+
+  /* Ziddu AI becomes a highlighted card pinned to the bottom of the sidebar. */
+  .ui-bottom-navigation button.is-ai {
+    order: 10;
+    min-height: 56px;
+    margin-top: auto;
+    padding: 9px 12px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, var(--ziddu-blue), #147cf0 48%, #04bfc2);
+    color: #fff;
+    box-shadow: 0 12px 26px rgba(23, 111, 229, .3);
+  }
+
+  .ui-bottom-navigation button.is-ai:hover {
+    box-shadow: 0 14px 30px rgba(23, 111, 229, .4);
+    transform: translateY(-1px);
+  }
+
+  .ui-bottom-navigation button.is-ai.is-active {
+    box-shadow: 0 0 0 3px rgba(0, 185, 216, .35), 0 12px 26px rgba(23, 111, 229, .3);
+  }
+
+  .ui-bottom-navigation button.is-ai .ui-bottom-navigation-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .2);
+    color: #fff;
+  }
+
+  .ui-bottom-navigation button.is-ai .ui-bottom-navigation-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ui-bottom-navigation button.is-ai > span:last-child {
+    display: grid;
+    gap: 2px;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .ui-bottom-navigation button.is-ai > span:last-child::after {
+    color: rgba(255, 255, 255, .85);
+    font-size: 11px;
+    font-weight: 600;
+    content: "Your local assistant";
+  }
+
+  /* ---------- Home ---------- */
+
+  .app-shell {
+    overflow: visible;
+    overflow-x: clip;
+  }
+
+  .app-shell .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 60px;
+    padding: 0 var(--desktop-gutter);
+    border-bottom: 1px solid var(--ziddu-border);
+    background: color-mix(in srgb, var(--ziddu-surface) 92%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  .has-bottom-navigation .app-shell .brand-lockup,
+  .has-bottom-navigation .app-shell .desktop-nav {
+    display: none;
+  }
+
+  .app-shell .home-mobile-actions {
+    display: none;
+  }
+
+  .app-shell .location-control {
+    gap: 10px;
+    min-width: 0;
+    max-width: 420px;
+    padding: 5px 14px 5px 5px;
+    border: 1px solid var(--ziddu-border);
+    border-radius: var(--ziddu-radius-pill);
+    background: var(--ziddu-background);
+  }
+
+  .app-shell .location-control:hover:not(:disabled) {
+    border-color: rgba(23, 111, 229, .45);
+    background: var(--ziddu-cyan);
+  }
+
+  .app-shell .location-pin {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--ziddu-blue);
+    color: #fff;
+  }
+
+  .app-shell .location-copy {
+    min-width: 0;
+  }
+
+  .app-shell .location-copy strong {
+    overflow: hidden;
+    font-size: 13.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell .top-actions {
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .app-shell .top-actions .icon-button {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--ziddu-border);
+    border-radius: 11px;
+    background: var(--ziddu-surface);
+  }
+
+  .app-shell .top-actions .icon-button:hover {
+    border-color: rgba(23, 111, 229, .45);
+    background: var(--ziddu-cyan);
+    color: var(--ziddu-blue);
+  }
+
+  .app-shell .top-actions .avatar-button {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .app-shell .page-frame {
+    display: grid;
+    grid-template-columns: minmax(0, 520px);
+    justify-content: center;
+    gap: 28px;
+    width: 100%;
+    max-width: none;
+    margin: 0 auto;
+    padding: 0 var(--desktop-gutter) 48px;
+  }
+
+  .app-shell .left-rail {
+    display: none;
+  }
+
+  .app-shell .right-rail {
+    display: none;
+  }
+
+  .app-shell .main-feed {
+    width: 100%;
+    min-width: 0;
+    padding-top: 20px;
+  }
+
+  .app-shell .category-tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .app-shell .category-tab {
+    min-height: 34px;
+    padding: 0 15px;
+    border: 1px solid var(--ziddu-border);
+    background: var(--ziddu-surface);
+    color: var(--ziddu-navy);
+    font-size: 13px;
+    font-weight: 750;
+    box-shadow: none;
+    cursor: pointer;
+  }
+
+  .app-shell .category-tab:hover:not(.selected) {
+    border-color: rgba(23, 111, 229, .45);
+    color: var(--ziddu-blue);
+  }
+
+  .app-shell .category-tab.selected {
+    box-shadow: 0 6px 16px rgba(23, 111, 229, .24);
+  }
+
+  .app-shell .post-list {
+    display: grid;
+    gap: 18px;
+  }
+
+  .app-shell .social-post {
+    border-radius: var(--desktop-card-radius);
+  }
+
+  .app-shell .load-more {
+    margin-top: 20px;
+  }
+
+  .app-shell .section-kicker {
+    color: var(--ziddu-blue);
+    font-size: 10.5px;
+  }
+
+  /* Right rail: shown once there is room for feed + rail side by side. */
+  @media (min-width: 1280px) {
+    .app-shell .page-frame {
+      grid-template-columns: minmax(0, 520px) 280px;
+    }
+
+    .app-shell .right-rail {
+      position: sticky;
+      top: 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      align-self: start;
+      max-height: calc(100vh - 60px);
+      padding: 20px 2px 20px;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .app-shell .right-rail::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  @media (min-width: 1480px) {
+    .app-shell .page-frame {
+      grid-template-columns: minmax(0, 540px) 300px;
+      gap: 36px;
+    }
+  }
+
+  .app-shell .neighborhood-card,
+  .app-shell .rail-section,
+  .app-shell .order-peek {
+    flex: none;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--ziddu-border);
+    border-radius: var(--desktop-card-radius);
+    background: var(--ziddu-surface);
+    box-shadow: var(--ziddu-shadow-sm);
+  }
+
+  .app-shell .neighborhood-map {
+    height: 120px;
+    background-color: var(--ziddu-cyan);
+  }
+
+  .app-shell .neighborhood-map::before,
+  .app-shell .neighborhood-map::after {
+    border-color: rgba(23, 111, 229, .14);
+    background: rgba(23, 111, 229, .09);
+  }
+
+  .app-shell .map-street {
+    color: color-mix(in srgb, var(--ziddu-blue) 60%, transparent);
+    font-weight: 700;
+  }
+
+  .app-shell .map-dash {
+    border-top-color: rgba(23, 111, 229, .35);
+  }
+
+  .app-shell .map-pin {
+    border-color: #fff;
+    background: var(--ziddu-blue);
+    box-shadow: 0 3px 8px rgba(23, 111, 229, .3);
+  }
+
+  .app-shell .pin-b {
+    background: var(--ziddu-teal);
+  }
+
+  .app-shell .pin-c {
+    background: var(--ziddu-green);
+  }
+
+  .app-shell .map-you {
+    border-color: var(--ziddu-blue);
+    background: rgba(23, 111, 229, .14);
+  }
+
+  .app-shell .map-you span {
+    background: var(--ziddu-blue);
+    box-shadow: 0 0 0 1px var(--ziddu-blue);
+  }
+
+  .app-shell .map-radius {
+    border-color: rgba(23, 111, 229, .3);
+  }
+
+  .app-shell .map-caption {
+    gap: 12px;
+    padding: 11px 14px 13px;
+  }
+
+  .app-shell .map-caption strong {
+    color: var(--ziddu-navy);
+    font-weight: 750;
+    font-size: 14.5px;
+    line-height: 1.25;
+    font-family: inherit;
+  }
+
+  .app-shell .map-caption > div > span:last-child {
+    color: var(--ziddu-muted);
+    font-size: 11.5px;
+  }
+
+  .app-shell .map-caption button,
+  .app-shell .rail-section-heading > button {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--ziddu-border);
+    border-radius: 9px;
+    background: var(--ziddu-background);
+    color: var(--ziddu-blue);
+  }
+
+  .app-shell .map-caption button:hover,
+  .app-shell .rail-section-heading > button:hover {
+    border-color: var(--ziddu-blue);
+    background: var(--ziddu-blue);
+    color: #fff;
+  }
+
+  .app-shell .rail-section {
+    padding: 14px 12px 10px;
+  }
+
+  .app-shell .rail-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .app-shell .rail-section-heading h3 {
+    margin: 5px 0 0;
+    color: var(--ziddu-navy);
+    font-weight: 750;
+    font-size: 15px;
+    line-height: 1.25;
+    font-family: inherit;
+  }
+
+  .app-shell .popular-list {
+    gap: 2px;
+    margin-top: 8px;
+  }
+
+  .app-shell .popular-shop {
+    gap: 9px;
+    padding: 6px;
+    border: 0;
+    border-radius: 12px;
+  }
+
+  .app-shell .popular-shop:hover {
+    background: var(--ziddu-cyan);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .app-shell .popular-number {
+    width: 20px;
+    color: var(--ziddu-muted);
+    font-weight: 750;
+    font-size: 12px;
+    font-family: inherit;
+  }
+
+  .app-shell .popular-avatar {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--ziddu-border);
+    border-radius: 10px;
+    background-color: var(--ziddu-cyan);
+  }
+
+  .app-shell .popular-info {
+    gap: 2px;
+  }
+
+  .app-shell .popular-info strong {
+    color: var(--ziddu-navy);
+    font-size: 13px;
+  }
+
+  .app-shell .popular-info span,
+  .app-shell .rail-empty {
+    color: var(--ziddu-muted);
+    font-size: 11px;
+  }
+
+  .app-shell .popular-rating {
+    padding: 3px 8px;
+    border-radius: var(--ziddu-radius-pill);
+    background: rgba(232, 163, 23, .13);
+    color: #c98a0b;
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .app-shell .order-peek {
+    padding: 13px;
+    color: var(--ziddu-navy);
+  }
+
+  .app-shell .order-peek-heading {
+    gap: 11px;
+  }
+
+  .app-shell .order-peek-heading > div strong {
+    color: var(--ziddu-navy);
+    font-weight: 750;
+    font-size: 14px;
+    line-height: 1.25;
+    font-family: inherit;
+  }
+
+  .app-shell .order-peek-heading > svg {
+    color: var(--ziddu-muted);
+  }
+
+  .app-shell .order-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: rgba(39, 168, 103, .13);
+    color: var(--ziddu-green);
+  }
+
+  .app-shell .order-peek-body {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--ziddu-border);
+  }
+
+  .app-shell .order-shop {
+    gap: 10px;
+  }
+
+  .app-shell .order-shop-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .app-shell .order-shop strong {
+    color: var(--ziddu-navy);
+    font-size: 12.5px;
+  }
+
+  .app-shell .order-shop > div > span {
+    color: var(--ziddu-muted);
+    font-size: 11px;
+  }
+
+  .app-shell .pickup-status {
+    margin-top: 12px;
+    padding: 9px 11px;
+    border-radius: 11px;
+    background: rgba(39, 168, 103, .1);
+    color: var(--ziddu-green);
+    font-size: 11.5px;
+  }
+
+  .app-shell .order-meta {
+    margin-top: 11px;
+    color: var(--ziddu-muted);
+    font-size: 12px;
+  }
+
+  .app-shell .order-meta strong {
+    color: var(--ziddu-navy);
+    font-size: 13px;
+  }
+
+  .app-shell .closing-note {
+    margin-top: 6px;
+    color: var(--ziddu-muted);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .app-shell .rail-legal {
+    margin: 0;
+    padding: 0;
+    color: var(--ziddu-muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .app-shell .rail-legal span {
+    color: var(--ziddu-border);
+  }
+
+  /* Compact post card chrome on desktop (home, saved, shop). */
+  .app-navigation-content .social-post-header {
+    min-height: 0;
+    padding: 10px 14px;
+  }
+
+  .app-navigation-content .post-shop-avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .app-navigation-content .post-shop-details > strong {
+    font-size: 14.5px;
+  }
+
+  .app-navigation-content .post-shop-location {
+    font-size: 12px;
+  }
+
+  .app-navigation-content .post-follow {
+    min-height: 32px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  /* Orders tab inside Home. */
+  .app-shell .purchase-history {
+    padding-top: 6px;
+  }
+
+  /* ---------- Explore / Search ---------- */
+
+  .search-page.explore-page {
+    width: 100%;
+    max-width: 1180px;
+    padding: 0 var(--desktop-gutter) 48px;
+  }
+
+  .explore-page .explore-topbar {
+    position: static;
+    min-height: 0;
+    padding: 24px 0 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .explore-page .explore-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
+  }
+
+  .explore-page .explore-title h1 {
+    margin: 0;
+    font-size: 26px;
+    line-height: 1.1;
+  }
+
+  .explore-page .explore-location {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 16px;
+    border: 1px solid var(--ziddu-border);
+    border-radius: var(--ziddu-radius-pill);
+    background: var(--ziddu-surface);
+    color: var(--ziddu-navy);
+    font-size: 13px;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
+  .explore-page .explore-location:hover {
+    border-color: rgba(23, 111, 229, .45);
+    background: var(--ziddu-cyan);
+  }
+
+  .explore-page .explore-location svg:first-child {
+    color: var(--ziddu-blue);
+  }
+
+  .explore-page .explore-controls {
+    margin-top: 14px;
+  }
+
+  .explore-page .search-input {
+    min-height: 46px;
+    border-radius: 13px;
+  }
+
+  .explore-page .search-input:focus-within {
+    border-color: var(--ziddu-blue);
+    box-shadow: 0 0 0 4px rgba(23, 111, 229, .12);
+  }
+
+  .explore-page .search-input input,
+  .explore-page .search-input input:focus-visible {
+    border: 0;
+    outline: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .explore-page .explore-quick-filters {
+    margin-top: 12px;
+  }
+
+  .explore-page .explore-quick-filters button {
+    cursor: pointer;
+  }
+
+  .explore-page .explore-select-row {
+    max-width: 640px;
+  }
+
+  .explore-page .explore-results {
+    gap: 26px;
+    margin-top: 12px;
+  }
+
+  .explore-page .search-section-heading h2 {
+    font-size: 18px;
+  }
+
+  .explore-page .explore-suggestion-list {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+  }
+
+  .explore-page .explore-suggestion-card {
+    border-radius: 14px;
+    background: var(--ziddu-surface);
+  }
+
+  .explore-page .explore-suggestion-image {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+  }
+
+  .explore-page .search-shop-list,
+  .explore-page .search-offer-list,
+  .explore-page .search-product-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  /* ---------- Saved ---------- */
+
+  .saved-page {
+    width: 100%;
+    max-width: 1180px;
+    padding: 24px var(--desktop-gutter) 64px;
+  }
+
+  .saved-page .saved-header h1 {
+    font-size: 26px;
+  }
+
+  .saved-page .saved-tabs button {
+    min-height: 34px;
+    padding: 0 16px;
+    border-radius: var(--ziddu-radius-pill);
+    cursor: pointer;
+  }
+
+  /* Masonry-style columns so cards of different heights pack without gaps. */
+  .saved-page .saved-posts {
+    display: block;
+    columns: 3 300px;
+    column-gap: 18px;
+  }
+
+  .saved-page .saved-posts > * {
+    margin-bottom: 18px;
+    break-inside: avoid;
+  }
+
+  .saved-page .saved-posts .social-post {
+    border-radius: var(--desktop-card-radius);
+  }
+
+  /* ---------- Shop profile ---------- */
+
+  .shop-profile-page {
+    width: 100%;
+    max-width: 900px;
+    padding: 0 var(--desktop-gutter) 64px;
+  }
+
+  .shop-profile-page .vendor-profile-cover {
+    aspect-ratio: 16 / 6;
+    border-radius: 18px;
+  }
+
+  .shop-profile-page .shop-profile-quick-actions {
+    max-width: 640px;
+    margin-inline: auto;
+  }
+
+  .shop-profile-page .shop-post-list {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    align-items: start;
+    gap: 18px;
+  }
+
+  /* ---------- Ziddu AI ---------- */
+
+  .ai-page .ai-header {
+    padding-inline: var(--desktop-gutter);
+  }
+
+  /* ---------- Videos ---------- */
+
+  .has-bottom-navigation .reels-page {
+    background: radial-gradient(circle at 50% 0%, #12304f, #080f1b 70%);
+  }
+
+  .has-bottom-navigation .reels-scroll {
+    height: 100svh;
+    padding: 20px 0;
+    scroll-padding-block: 20px;
+  }
+
+  .has-bottom-navigation .reel-surface {
+    width: min(400px, calc((100svh - 40px) * 9 / 16));
+    height: calc(100svh - 40px);
+    margin: 0 auto 20px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+  }
+}
