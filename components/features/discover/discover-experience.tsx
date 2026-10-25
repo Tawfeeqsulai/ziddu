@@ -33,13 +33,11 @@ import { BrandLogo } from "@/components/ui/brand-logo";
 import { EmptyState } from "@/components/ui/states";
 import { useRouter } from "next/navigation";
 import { publishFollowChange } from "@/lib/follow-sync";
-import { useLoginPrompt } from "@/components/features/auth/login-prompt-provider";
 import { UpiQrScanner } from "@/components/features/payment/upi-qr-scanner";
 import { getCurrentLocation } from "@/lib/current-location";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
 
 type DiscoverExperienceProps = {
-  authenticated: boolean;
   data: DiscoveryData;
   initialLocation?: { city: string | null; locality: string | null; latitude: number | null; longitude: number | null };
 };
@@ -85,9 +83,8 @@ function shopForPost(post: FeedPost, shops: Shop[]) {
   return shops.find((shop) => shop.id === post.shopId)!;
 }
 
-export default function DiscoverExperience({ authenticated, data, initialLocation }: DiscoverExperienceProps) {
+export default function DiscoverExperience({ data, initialLocation }: DiscoverExperienceProps) {
   const router = useRouter();
-  const { requireLogin } = useLoginPrompt();
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>("All");
   const [activeTab, setActiveTab] = useState("For you");
   const [following, setFollowing] = useState<string[]>(() => data.shops.filter((shop) => shop.followed).map((shop) => shop.id));
@@ -122,51 +119,28 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
     setLocationBusy(true);
     setLocationError("");
     try {
-      if (authenticated) {
-        const response = await fetch("/api/location/save", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...location, locality: location.locality ?? undefined, city: location.city ?? undefined }),
-        });
-        const result = await response.json().catch(() => null) as { message?: string } | null;
-        if (!response.ok) throw new Error(result?.message ?? "This location could not be saved.");
-      }
-      try { window.localStorage.setItem("ziddu:guest-location", JSON.stringify(location)); } catch { /* Location still works for this visit if storage is unavailable. */ }
+      const response = await fetch("/api/location/save", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...location, locality: location.locality ?? undefined, city: location.city ?? undefined }),
+      });
+      const result = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) throw new Error(result?.message ?? "This location could not be saved.");
       setCurrentLocation(location);
       setLocationPickerOpen(false);
-      if (authenticated) router.refresh();
+      router.refresh();
     } catch (cause) {
       setLocationError(cause instanceof Error ? cause.message : "This location could not be saved.");
     } finally { setLocationBusy(false); }
   }
 
   async function updateCurrentLocation() {
-    setLocationBusy(true);
-    setLocationError("");
     try {
       const location = await getCurrentLocation();
       await saveLocation({ ...location, city: location.city ?? null, locality: location.locality ?? null });
     } catch (cause) {
       setLocationError(cause instanceof Error ? cause.message : "We couldn't determine your location. Try again or enter your area manually.");
-    } finally { setLocationBusy(false); }
-  }
-
-  useEffect(() => {
-    if (initialLocation?.latitude != null && initialLocation.longitude != null) return;
-    try {
-      const cached = JSON.parse(window.localStorage.getItem("ziddu:guest-location") ?? "null") as ActiveLocation | null;
-      if (cached?.latitude != null && cached.longitude != null) {
-        setCurrentLocation(cached);
-        if (authenticated) void saveLocation(cached);
-        return;
-      }
-    } catch {
-      // Ignore invalid cached location and ask the browser for a fresh fix.
     }
-    void updateCurrentLocation();
-  // Resolve location once when the feed opens; denied permission leaves browsing available.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
   const locationLabel = [currentLocation?.locality, currentLocation?.city].filter(Boolean).join(", ") || "Set your location";
   const locationChoices = useMemo(() => Array.from(new Map(data.shops
@@ -232,7 +206,6 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
   }, [activeCategory, activeTab, currentLocation, data.posts, data.shops, following, locationRadius]);
 
   async function toggleInteraction(action: "like" | "save" | "follow", id: string) {
-    if (!authenticated) { requireLogin(); return; }
     setInteractionError("");
     const update = action === "like" ? setLikedPosts : action === "save" ? setSavedPosts : setFollowing;
     const wasActive = (action === "like" ? likedPosts : action === "save" ? savedPosts : following).includes(id);
@@ -242,14 +215,9 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
       const response = await fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, active: !wasActive }) });
       if (response.status === 401) { router.push("/login"); throw new Error("Sign in required"); }
       if (!response.ok) throw new Error("Interaction unavailable");
-      const result = await response.json() as { active?: boolean; followerCount?: number };
-      if (typeof result.active === "boolean") {
-        const confirmedActive = result.active;
-        update((current) => confirmedActive
-          ? current.includes(id) ? current : [...current, id]
-          : current.filter((item) => item !== id));
-      }
+      window.dispatchEvent(new Event("ziddu:feed-mutation"));
       if (action === "follow") {
+        const result = await response.json() as { active?: boolean; followerCount?: number };
         if (typeof result.active === "boolean" && typeof result.followerCount === "number") {
           publishFollowChange({ shopId: id, active: result.active, followerCount: result.followerCount });
         }
@@ -268,7 +236,6 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
   }
 
   async function completePayment() {
-    if (!authenticated) { requireLogin(); return; }
     if (!checkoutPost) return;
     const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: checkoutPost.id, quantity: 1, paymentMethod: "SIMULATED_CARD" }) });
     if (!response.ok) return;
@@ -292,15 +259,15 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
         </button>
         <nav aria-label="Desktop navigation" className="desktop-nav">
           <Link href="/search">Search</Link>
-          <Link href="/reels" onClick={(event) => { if (!authenticated) { event.preventDefault(); requireLogin(); } }}>Videos</Link>
-          <Link href="/saved" onClick={(event) => { if (!authenticated) { event.preventDefault(); requireLogin(); } }}>Saved</Link>
-          <Link className="desktop-nav-ai" href="/ai" onClick={(event) => { if (!authenticated) { event.preventDefault(); requireLogin(); } }}><Sparkles size={13} /> AI</Link>
+          <Link href="/reels">Videos</Link>
+          <Link href="/saved">Saved</Link>
+          <Link className="desktop-nav-ai" href="/ai"><Sparkles size={13} /> AI</Link>
         </nav>
         <div className="top-actions home-desktop-actions">
-          <button aria-label="Scan UPI payment QR" className="icon-button upi-scan-trigger" onClick={() => { if (!authenticated) { requireLogin(); return; } setShowUpiScanner(true); }} title="Scan UPI payment QR" type="button">
+          <button aria-label="Scan UPI payment QR" className="icon-button upi-scan-trigger" onClick={() => setShowUpiScanner(true)} title="Scan UPI payment QR" type="button">
             <QrCode size={19} />
           </button>
-          <Link aria-label="Order history" className="icon-button cart-button" href="/orders" onClick={(event) => { if (!authenticated) { event.preventDefault(); requireLogin(); } }}>
+          <Link aria-label="Order history" className="icon-button cart-button" href="/orders">
             <ShoppingBag size={19} />
             {Object.values(cart).reduce((total, count) => total + count, 0) > 0 && <span className="cart-count">{Object.values(cart).reduce((total, count) => total + count, 0)}</span>}
           </Link>
@@ -326,11 +293,7 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
               { label: "Following", icon: Heart },
               { label: "Your orders", icon: ShoppingBag },
             ].map(({ label, icon: Icon, route }) => (
-              <button className={`nav-item ${activeTab === label ? "is-active" : ""}`} key={label} onClick={() => {
-                const needsLogin = ["Videos", "Saved", "ZIDDU AI", "Profile", "Affiliate program", "Following", "Your orders"].includes(label);
-                if (needsLogin && !authenticated) { requireLogin(); return; }
-                if (route) router.push(route); else setActiveTab(label);
-              }} type="button">
+              <button className={`nav-item ${activeTab === label ? "is-active" : ""}`} key={label} onClick={() => route ? router.push(route) : setActiveTab(label)} type="button">
                 <Icon size={18} strokeWidth={activeTab === label ? 2.2 : 1.8} />
                 <span>{label}</span>
                 {label === "Your orders" && <span className="nav-order-dot" />}
@@ -390,7 +353,7 @@ export default function DiscoverExperience({ authenticated, data, initialLocatio
                       followed={following.includes(shop.id)}
                       key={post.id}
                       liked={likedPosts.includes(post.id)}
-                      onCheckout={() => { if (!authenticated) { requireLogin(); return; } setCheckoutPost(post); setPaymentComplete(false); }}
+                      onCheckout={() => { setCheckoutPost(post); setPaymentComplete(false); }}
                       onFollow={() => { void toggleInteraction("follow", shop.id); }}
                       onLike={() => { void toggleInteraction("like", post.id); }}
                       onOpenShop={() => router.push(`/shops/${shop.id}`)}

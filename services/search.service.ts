@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
 import { getDiscoveryData } from "@/services/discovery.service";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
@@ -16,7 +17,7 @@ export type SearchResults = { query: string; category: BusinessCategory | "ALL";
 
 async function searchSharedVendorOffers(query: string, category: BusinessCategory | "ALL", city: string, locality: string, userLocation: { latitude?: number | null; longitude?: number | null }, maxDistance: number): Promise<SearchOffer[]> {
   const now = new Date();
-  const records = await prisma.sharedOffer.findMany({
+  const records = await sharedPrisma.sharedOffer.findMany({
     where: { AND: [
       { OR: [{ validityFrom: null }, { validityFrom: { lte: now } }] },
       { OR: [{ validityTo: null }, { validityTo: { gte: now } }] },
@@ -24,7 +25,7 @@ async function searchSharedVendorOffers(query: string, category: BusinessCategor
     include: { vendor: { include: { user: true } }, posts: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   const itemIds = [...new Set(records.filter((offer) => !offer.offerTargetType || /ITEM|PRODUCT|MENU/i.test(offer.offerTargetType)).map((offer) => offer.offerTargetId).filter((id): id is number => id !== null))];
-  const menuItems = itemIds.length ? await prisma.sharedMenuItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, productName: true, image: true } }) : [];
+  const menuItems = itemIds.length ? await sharedPrisma.sharedMenuItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, productName: true, image: true } }) : [];
   const itemById = new Map(menuItems.map((item) => [item.id, item]));
   const normalizedQuery = query.toLowerCase();
 

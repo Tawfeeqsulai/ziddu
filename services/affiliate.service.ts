@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { AffiliateReferralType, AffiliateStatus, Prisma } from "@/lib/db/generated/main";
+import { AffiliateReferralType, AffiliateStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AFFILIATE_PROGRAM, calculateCommission } from "@/lib/affiliate/config";
 import type { ReferralAttribution } from "@/lib/affiliate/referral-cookie";

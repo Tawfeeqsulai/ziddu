@@ -9,7 +9,7 @@ type LoginExperienceProps = {
 };
 
 export default function LoginExperience({ developmentOtp }: LoginExperienceProps) {
-    const [showMobileFeatures, setShowMobileFeatures] = useState(false);
+    const [showMobileFeatures, setShowMobileFeatures] = useState(true);
 
     return (
         <main className={`login-page${showMobileFeatures ? " mobile-features-active" : ""}`}>

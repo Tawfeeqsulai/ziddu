@@ -9,7 +9,7 @@ export default function ProfileSignOutButton() {
 
   async function signOut() {
     await authClient.signOut();
-    router.replace("/");
+    router.replace("/login");
     router.refresh();
   }
 

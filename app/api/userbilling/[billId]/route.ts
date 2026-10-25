@@ -12,30 +12,13 @@ const updateSchema = z.object({
   items: z.array(z.object({ itemId: z.coerce.number().int().positive(), quantity: z.coerce.number().int().positive().max(100) })).min(1),
 });
 
-// Same line shape the vendor billing API writes; `bills.products` must stay a plain array of these.
-type BillProduct = { price: number; item_id: number; quantity: number; category_id: number | null; total_price: number; sub_category_id: number | null };
-
-const LOCKED_STATUSES = ["paid", "success", "completed", "cancelled", "rejected", "ready"];
-// Request ids of recent updates, so a retried request is not added twice.
-const REQUEST_TTL_MS = 10 * 60 * 1000;
-const recentRequests = new Map<string, { billId: number; expires: number }>();
-
-function rememberRequest(requestId: string, billId: number) {
-  const now = Date.now();
-  for (const [id, entry] of recentRequests) if (entry.expires < now) recentRequests.delete(id);
-  recentRequests.set(requestId, { billId, expires: now + REQUEST_TTL_MS });
-}
-
-function optionalId(value: unknown) {
-  const id = Number(value);
-  return value != null && Number.isInteger(id) && id > 0 ? id : null;
-}
+type BillProduct = { item_id: number; quantity: number; price: number; total_price: number };
+type BillPayload = { products?: unknown[]; _updateRequestIds?: string[] };
 
 function normalizeBillProducts(value: unknown): BillProduct[] {
-  // Older updates wrapped the lines as { products: [...], _updateRequestIds: [...] }.
-  const lines = Array.isArray(value) ? value : value && typeof value === "object" && Array.isArray((value as { products?: unknown }).products) ? (value as { products: unknown[] }).products : [];
+  if (!Array.isArray(value)) return [];
 
-  return lines.flatMap((entry) => {
+  return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object") return [];
     const row = entry as Record<string, unknown>;
     const product = row.product && typeof row.product === "object" ? row.product as Record<string, unknown> : {};
@@ -44,14 +27,7 @@ function normalizeBillProducts(value: unknown): BillProduct[] {
     const price = Number(row.price ?? row.unit_price ?? row.unitPrice ?? product.price ?? product.unit_price ?? product.unitPrice);
     if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0) return [];
     const total = Number(row.total_price ?? quantity * price);
-    return [{
-      price,
-      item_id: itemId,
-      quantity,
-      category_id: optionalId(row.category_id ?? row.categoryId),
-      total_price: Number.isFinite(total) && total >= 0 ? total : Math.round(quantity * price * 100) / 100,
-      sub_category_id: optionalId(row.sub_category_id ?? row.subCategoryId),
-    }];
+    return [{ item_id: itemId, quantity, price, total_price: Number.isFinite(total) && total >= 0 ? total : Math.round(quantity * price * 100) / 100 }];
   });
 }
 
@@ -70,71 +46,44 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ bi
   const orderingUser = await sharedPrisma.sharedUser.findFirst({ where: { phoneNumber: { in: [phoneNumber, nationalNumber, `91${nationalNumber}`, `0${nationalNumber}`] } }, select: { id: true } });
   if (!orderingUser) return NextResponse.json({ message: "Your ordering account could not be found." }, { status: 400 });
 
-  const bill = await sharedPrisma.sharedBill.findFirst({ where: { id: billId, endUserId: orderingUser.id, vendorId: parsed.data.vendorId }, select: { id: true, vendorId: true, totalPrice: true } });
+  const bill = await sharedPrisma.sharedBill.findFirst({ where: { id: billId, endUserId: orderingUser.id, vendorId: parsed.data.vendorId } });
   if (!bill) return NextResponse.json({ message: "Order not found." }, { status: 404 });
-  if (recentRequests.get(parsed.data.requestId)?.billId === bill.id) return NextResponse.json({ billId: bill.id, total: Number(bill.totalPrice), duplicate: true });
+  if (["paid", "success", "completed", "cancelled", "rejected", "ready"].includes(bill.paymentStatus.toLowerCase())) return NextResponse.json({ message: "This order can no longer be changed." }, { status: 409 });
 
+  const current = bill.products && typeof bill.products === "object" && !Array.isArray(bill.products) ? bill.products as BillPayload : { products: Array.isArray(bill.products) ? bill.products : [] };
+  if ((current._updateRequestIds ?? []).includes(parsed.data.requestId)) return NextResponse.json({ billId: bill.id, total: Number(bill.totalPrice), duplicate: true });
   const uniqueItemIds = [...new Set(parsed.data.items.map((item) => item.itemId))];
   const [items, offers] = await Promise.all([
-    sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: bill.vendorId, id: { in: uniqueItemIds } }, select: { id: true, price: true, menuCategoryId: true, menuSubCategoryId: true } }),
+    sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: bill.vendorId, id: { in: uniqueItemIds } }, select: { id: true, price: true } }),
     sharedPrisma.sharedOffer.findMany({ where: { vendorId: bill.vendorId, offerTargetId: { in: uniqueItemIds } }, select: { offerTargetId: true, offerTargetType: true, offerType: true, offerValue: true, validityFrom: true, validityTo: true } }),
   ]);
   if (items.length !== uniqueItemIds.length) return NextResponse.json({ message: "One or more menu items are unavailable." }, { status: 409 });
-  const itemById = new Map(items.map((item) => [item.id, item]));
+  const prices = new Map(items.map((item) => [item.id, Number(item.price)]));
   const now = new Date();
-  const additions: BillProduct[] = parsed.data.items.map((requested) => {
-    const item = itemById.get(requested.itemId)!;
+  const additions = parsed.data.items.map((requested) => {
+    const price = prices.get(requested.itemId)!;
     const active = offers.find((offer) => {
       const targetType = offer.offerTargetType?.toUpperCase();
       return offer.offerTargetId === requested.itemId && (!targetType || /ITEM|PRODUCT|MENU/.test(targetType)) && (!offer.validityFrom || offer.validityFrom <= now) && (!offer.validityTo || offer.validityTo >= now);
     });
-    const line = calculateOfferLine(Number(item.price), requested.quantity, offerPricing(active?.offerType, active?.offerValue));
-    // Preserve the discounted line total while using an effective per-served-unit
-    // price so the vendor's quantity × price calculation stays consistent.
+    const line = calculateOfferLine(price, requested.quantity, offerPricing(active?.offerType, active?.offerValue));
     const appliedUnitPrice = line.total / line.billedQuantity;
-    return {
-      price: Math.round(appliedUnitPrice * 100) / 100,
-      item_id: requested.itemId,
-      quantity: line.billedQuantity,
-      category_id: item.menuCategoryId,
-      total_price: Math.round(line.total * 100) / 100,
-      sub_category_id: item.menuSubCategoryId,
-    };
+    return { item_id: requested.itemId, quantity: line.billedQuantity, price: Math.round(appliedUnitPrice * 100) / 100, total_price: Math.round(line.total * 100) / 100 };
   });
-
-  // Lock the bill row while merging so two quick "add more" requests cannot overwrite each other.
-  const result = await sharedPrisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM bills WHERE id = ${bill.id} FOR UPDATE`;
-    const fresh = await tx.sharedBill.findUnique({ where: { id: bill.id }, select: { products: true, paymentStatus: true } });
-    if (!fresh || LOCKED_STATUSES.includes(fresh.paymentStatus.toLowerCase())) return null;
-
-    const merged = normalizeBillProducts(fresh.products);
-    // Fill in categories for older lines that were saved without them.
-    const missingIds = [...new Set(merged.filter((line) => line.category_id === null && !itemById.has(line.item_id)).map((line) => line.item_id))];
-    const extraItems = missingIds.length ? await tx.sharedMenuItem.findMany({ where: { id: { in: missingIds } }, select: { id: true, menuCategoryId: true, menuSubCategoryId: true } }) : [];
-    const categories = new Map([...items, ...extraItems].map((item) => [item.id, item]));
-    for (const line of merged) {
-      const item = categories.get(line.item_id);
-      if (item && line.category_id === null) {
-        line.category_id = item.menuCategoryId;
-        line.sub_category_id = item.menuSubCategoryId;
-      }
+  // Preserve the discounted line total while using an effective per-served-unit
+  // price so the vendor's quantity × price calculation stays consistent.
+  const merged = normalizeBillProducts(current.products);
+  for (const requested of additions) {
+    const existing = merged.find((item) => item.item_id === requested.item_id && item.price === requested.price);
+    if (existing) {
+      existing.quantity += requested.quantity;
+      existing.total_price = Math.round((existing.total_price + requested.total_price) * 100) / 100;
+    } else {
+      merged.push(requested);
     }
-    for (const requested of additions) {
-      const existing = merged.find((line) => line.item_id === requested.item_id && line.price === requested.price);
-      if (existing) {
-        existing.quantity += requested.quantity;
-        existing.total_price = Math.round((existing.total_price + requested.total_price) * 100) / 100;
-      } else {
-        merged.push(requested);
-      }
-    }
-    const total = Math.round(merged.reduce((sum, line) => sum + line.total_price, 0) * 100) / 100;
-    const updated = await tx.sharedBill.update({ where: { id: bill.id }, data: { products: merged, totalPrice: total, updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000) } });
-    return { updated, merged };
-  });
-  if (!result) return NextResponse.json({ message: "This order can no longer be changed." }, { status: 409 });
-
-  rememberRequest(parsed.data.requestId, bill.id);
-  return NextResponse.json({ billId: result.updated.id, total: Number(result.updated.totalPrice), products: result.merged, status: result.updated.paymentStatus });
+  }
+  const total = Math.round(merged.reduce((sum, item) => sum + item.total_price, 0) * 100) / 100;
+  const products = { products: merged, _updateRequestIds: [...(current._updateRequestIds ?? []), parsed.data.requestId].slice(-20) };
+  const updated = await sharedPrisma.sharedBill.update({ where: { id: bill.id }, data: { products, totalPrice: total } });
+  return NextResponse.json({ billId: updated.id, total: Number(updated.totalPrice), products: merged, status: updated.paymentStatus });
 }

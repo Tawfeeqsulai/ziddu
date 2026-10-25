@@ -32,7 +32,7 @@ function offerEndDate(value: string) {
   return Number.isNaN(date.getTime()) ? "Offer live now" : `Valid until ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date)}`;
 }
 
-export default function SearchExperience({ results, authenticated, initialDistance, initialLocation }: SearchExperienceProps) {
+export default function SearchExperience({ results, initialDistance, initialLocation }: SearchExperienceProps) {
   const router = useRouter();
   const [input, setInput] = useState(results.query);
   const [category, setCategory] = useState<BusinessCategory | "ALL">(results.category);
@@ -49,18 +49,6 @@ export default function SearchExperience({ results, authenticated, initialDistan
   const [placeSearchBusy, setPlaceSearchBusy] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationError, setLocationError] = useState("");
-
-  useEffect(() => {
-    if (initialLocation?.latitude != null && initialLocation.longitude != null) return;
-    try {
-      const cached = JSON.parse(window.localStorage.getItem("ziddu:guest-location") ?? "null") as typeof initialLocation;
-      if (cached?.latitude != null && cached.longitude != null) {
-        setCurrentLocation(cached);
-      }
-    } catch {
-      // Location filtering remains optional when browser storage is unavailable.
-    }
-  }, [initialLocation]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -94,12 +82,9 @@ export default function SearchExperience({ results, authenticated, initialDistan
     setLocationBusy(true);
     setLocationError("");
     try {
-      if (authenticated) {
-        const response = await fetch("/api/location/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(location) });
-        const result = await response.json().catch(() => null) as { message?: string } | null;
-        if (!response.ok) throw new Error(result?.message ?? "This location could not be saved.");
-      }
-      try { window.localStorage.setItem("ziddu:guest-location", JSON.stringify(location)); } catch { /* Keep the selected location for this view. */ }
+      const response = await fetch("/api/location/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(location) });
+      const result = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) throw new Error(result?.message ?? "This location could not be saved.");
       setCurrentLocation({ city: location.city ?? null, locality: location.locality ?? null, latitude: location.latitude ?? null, longitude: location.longitude ?? null });
       setLocationPickerOpen(false);
       const params = new URLSearchParams(window.location.search);

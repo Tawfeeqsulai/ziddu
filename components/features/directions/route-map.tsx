@@ -10,7 +10,6 @@ type RouteMapProps = {
   apiKey: string;
   vendorName: string;
   origin: Coordinates | null;
-  livePosition?: Coordinates | null;
   destination: Coordinates;
   routeRequestId: number;
   onRouteSummary: (summary: RouteSummary | null) => void;
@@ -38,32 +37,8 @@ function formatDuration(minutes?: number | null) {
   return hours > 0 ? `${hours} hr${hours === 1 ? "" : "s"}${remainingMinutes ? ` ${remainingMinutes} min` : ""}` : `${roundedMinutes} min`;
 }
 
-export default function RouteMap({ apiKey, vendorName, origin, livePosition = null, destination, routeRequestId, onRouteSummary, onRouteLoading, onRouteError }: RouteMapProps) {
+export default function RouteMap({ apiKey, vendorName, origin, destination, routeRequestId, onRouteSummary, onRouteLoading, onRouteError }: RouteMapProps) {
   const mapElement = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markerLibraryRef = useRef<google.maps.MarkerLibrary | null>(null);
-  const liveMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
-  const livePositionRef = useRef(livePosition);
-
-  function placeLiveMarker() {
-    const map = mapRef.current;
-    const markerLibrary = markerLibraryRef.current;
-    const position = livePositionRef.current;
-    if (!map || !markerLibrary || !position) return;
-    const point = { lat: position.latitude, lng: position.longitude };
-    if (liveMarkerRef.current) {
-      liveMarkerRef.current.position = point;
-      return;
-    }
-    const dot = document.createElement("span");
-    dot.className = "route-map-live-dot";
-    liveMarkerRef.current = new markerLibrary.AdvancedMarkerElement({ map, position: point, title: "You are here", content: dot, zIndex: 10 });
-  }
-
-  useEffect(() => {
-    livePositionRef.current = livePosition;
-    placeLiveMarker();
-  }, [livePosition?.latitude, livePosition?.longitude]);
 
   useEffect(() => {
     let active = true;
@@ -91,9 +66,6 @@ export default function RouteMap({ apiKey, vendorName, origin, livePosition = nu
           gestureHandling: "greedy",
         });
         markers.push(new markerLibrary.AdvancedMarkerElement({ map, position: vendorPoint, title: vendorName }));
-        mapRef.current = map;
-        markerLibraryRef.current = markerLibrary;
-        placeLiveMarker();
 
         if (!origin) {
           onRouteSummary(null);
@@ -150,9 +122,6 @@ export default function RouteMap({ apiKey, vendorName, origin, livePosition = nu
 
     return () => {
       active = false;
-      if (liveMarkerRef.current) liveMarkerRef.current.map = null;
-      liveMarkerRef.current = null;
-      mapRef.current = null;
       routeLine?.setMap(null);
       markers.forEach((marker) => { marker.map = null; });
       mapElement.current?.replaceChildren();

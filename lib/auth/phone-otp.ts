@@ -1,7 +1,6 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { GenericEndpointContext } from "better-auth";
-import { APIError } from "better-auth/api";
 import { prisma } from "@/lib/db/prisma";
 import { authSecret } from "@/lib/auth-secret";
 
@@ -30,10 +29,8 @@ export async function deliverDevelopmentOtp(
 
   const now = new Date();
   const existing = await prisma.phoneOtp.findUnique({ where: { phoneNumber } });
-  const waitMs = existing ? resendCooldownMs - (now.getTime() - existing.lastSentAt.getTime()) : 0;
-  if (waitMs > 0) {
-    const seconds = Math.ceil(waitMs / 1000);
-    throw new APIError("TOO_MANY_REQUESTS", { message: `A code was just sent to this number. Request a new one in ${seconds} seconds.` });
+  if (existing && now.getTime() - existing.lastSentAt.getTime() < resendCooldownMs) {
+    throw new Error("OTP resend cooldown is active.");
   }
 
   void code;

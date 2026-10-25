@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AffiliateReferralType, AffiliateReferralStatus, Prisma } from "@/lib/db/generated/main";
+import { AffiliateReferralType, AffiliateReferralStatus, Prisma } from "@prisma/client";
 import { requireActiveAffiliate } from "@/lib/affiliate/api";
 import { prisma } from "@/lib/db/prisma";
 

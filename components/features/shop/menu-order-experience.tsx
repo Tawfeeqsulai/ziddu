@@ -1,11 +1,11 @@
 "use client";
 
 import { ArrowLeft, Check, ChevronRight, Clock3, Minus, Plus, Search, ShieldCheck, ShoppingBag, Sparkles, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { ShopProduct, ShopProfile } from "@/services/shop-profile.service";
 import type { PurchaseHistoryRecord } from "@/services/purchase-history.service";
 import { calculateOfferLine } from "@/lib/offer-pricing";
-import { useLoginPrompt } from "@/components/features/auth/login-prompt-provider";
 
 type MenuOrderExperienceProps = { shop: ShopProfile["shop"]; products: ShopProduct[]; authenticated: boolean; existingOrder?: PurchaseHistoryRecord; onClose?: () => void };
 type OrderView = "menu" | "cart" | "confirmation" | "bill";
@@ -15,7 +15,7 @@ function money(value: number) {
 }
 
 export default function MenuOrderExperience({ shop, products, authenticated, existingOrder, onClose }: MenuOrderExperienceProps) {
-  const { requireLogin } = useLoginPrompt();
+  const router = useRouter();
   const [view, setView] = useState<OrderView>("menu");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -38,8 +38,6 @@ export default function MenuOrderExperience({ shop, products, authenticated, exi
   const offerSavings = cartLines.reduce((sum, line) => sum + line.savings, 0);
   const total = cartLines.reduce((sum, line) => sum + line.total, 0);
   const itemCount = cartLines.reduce((count, line) => count + line.billedQuantity, 0);
-  const savedTotal = products.reduce((sum, product) => sum + ((savedQuantities[product.id] ?? 0) > 0 ? calculateOfferLine(product.price, savedQuantities[product.id], product.offer).total : 0), 0);
-  const addedTotal = Math.max(0, total - savedTotal);
   const categoryCounts = useMemo(() => Object.fromEntries(categories.map((item) => [item, item === "All" ? products.length : products.filter((product) => product.category === item).length])), [categories, products]);
   const orderNumber = activeBillId ?? `ZD${shop.id.replace(/\D/g, "").padStart(6, "0").slice(-6)}`;
 
@@ -60,7 +58,7 @@ export default function MenuOrderExperience({ shop, products, authenticated, exi
 
   async function placeOrder() {
     if (!authenticated) {
-      requireLogin();
+      router.push("/login");
       return;
     }
     setSubmitting(true);
@@ -80,13 +78,12 @@ export default function MenuOrderExperience({ shop, products, authenticated, exi
       });
       const result = await response.json().catch(() => null) as { message?: string; billId?: string | number } | null;
       if (response.status === 401) {
-        requireLogin();
+        router.push("/login");
         return;
       }
       if (!response.ok) throw new Error(result?.message ?? "Could not place your order.");
       if (result?.billId) setActiveBillId(String(result.billId));
-      // Everything in the cart is now on the bill; only items added after this count as new.
-      setSavedQuantities({ ...quantities });
+      if (isUpdate) setSavedQuantities({ ...quantities });
       setLastActionWasUpdate(isUpdate);
       setCanAddMoreToOrder(Boolean(result?.billId));
       setView("confirmation");
@@ -120,7 +117,7 @@ export default function MenuOrderExperience({ shop, products, authenticated, exi
       <div className="cart-items">{cartLines.map(({ product, ...line }) => <article className="cart-item" key={product.id}><div className="cart-item-image" style={{ backgroundImage: `url("${product.image ?? "/ziddu-logo.png"}")` }} /><div className="cart-item-copy"><strong>{product.name}{line.freeQuantity > 0 && <span className="cart-free-count"> ×{line.billedQuantity}</span>}</strong><div className="cart-line-pricing">{line.unitPrice < line.regularPrice && <del>{money(line.regularPrice)}</del>}<span>{money(line.unitPrice)} × {quantities[product.id]}</span>{line.freeQuantity > 0 && <small>+ {line.freeQuantity} free</small>}</div>{product.offer?.badge && <span className="cart-offer-applied">◇ {product.offer.badge}{line.freeQuantity > 0 && <> · {line.freeQuantity} free</>}</span>}<div className="quantity-control"><button aria-label={`Remove one ${product.name}`} onClick={() => changeQuantity(product, -1)} type="button"><Minus size={13} /></button><span>{quantities[product.id]}</span><button aria-label={`Add one ${product.name}`} onClick={() => changeQuantity(product, 1)} type="button"><Plus size={13} /></button></div></div><strong className="cart-item-total">{money(line.total)}</strong></article>)}</div>
       <div className="cart-summary"><div><span>Subtotal before offers</span><strong>{money(subtotal)}</strong></div>{offerSavings > 0 && <div className="cart-savings"><span>Offer savings</span><strong>−{money(offerSavings)}</strong></div>}<div className="cart-grand-total"><span>Total</span><strong>{money(total)}</strong></div></div>
       {orderError && <p aria-live="polite" className="order-error" role="alert">{orderError}</p>}
-      <button className="menu-primary-button" disabled={submitting} onClick={() => { void placeOrder(); }} type="button">{submitting ? "Sending order..." : activeBillId ? `Add to Order · +${money(addedTotal)}` : `Place Order · ${money(total)}`}</button>
+      <button className="menu-primary-button" disabled={submitting} onClick={() => { void placeOrder(); }} type="button">{submitting ? "Sending order..." : `Place Order · ${money(total)}`}</button>
     </section>;
   }
 

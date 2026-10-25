@@ -2,6 +2,7 @@ import "server-only";
 
 import { normalizeIndianPhone } from "@/lib/auth/phone";
 import { prisma } from "@/lib/db/prisma";
+import { sharedPrisma } from "@/lib/db/shared-prisma";
 
 const HISTORY_API_BASE = "https://zoggy-backend-api.vercel.app/api";
 
@@ -40,7 +41,7 @@ async function addProductNames(records: PurchaseHistoryRecord[]) {
   const vendorIds = [...new Set(records.map((record) => Number(record.vendorId)).filter(Number.isInteger))];
   const itemIds = [...new Set(records.flatMap((record) => record.products.map((product) => product.itemId)).filter((id): id is number => id !== null))];
   if (vendorIds.length === 0 || itemIds.length === 0) return records;
-  const items = await prisma.sharedMenuItem.findMany({ where: { vendorId: { in: vendorIds }, id: { in: itemIds } }, select: { vendorId: true, id: true, productName: true } });
+  const items = await sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: { in: vendorIds }, id: { in: itemIds } }, select: { vendorId: true, id: true, productName: true } });
   const names = new Map(items.map((item) => [`${item.vendorId}:${item.id}`, item.productName]));
   return records.map((record) => ({ ...record, products: record.products.map((product) => ({ ...product, itemName: product.itemId === null ? undefined : names.get(`${record.vendorId}:${product.itemId}`) })) }));
 }
@@ -125,7 +126,7 @@ export async function getPurchaseHistory(userId: string) {
 
   const nationalNumber = phoneNumber.slice(3);
   const phoneVariants = [phoneNumber, nationalNumber, `91${nationalNumber}`, `0${nationalNumber}`];
-  const orderingUser = await prisma.sharedUser.findFirst({ where: { phoneNumber: { in: phoneVariants } }, select: { id: true } });
+  const orderingUser = await sharedPrisma.sharedUser.findFirst({ where: { phoneNumber: { in: phoneVariants } }, select: { id: true } });
   if (!orderingUser) return { all: { records: [], unavailable: false }, weekly: { records: [], unavailable: false }, daily: { records: [], unavailable: false } };
 
   const [all, weeklyResult, dailyResult] = await Promise.all([

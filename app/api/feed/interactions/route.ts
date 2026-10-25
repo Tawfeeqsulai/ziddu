@@ -3,10 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { getCurrentUser } from "@/lib/auth/session";
 import { postInteractionInputSchema, followInputSchema } from "@/lib/validation/domain";
-import { getExternalLikesForPosts, getSharedLikeUserId, updateExternalLike } from "@/services/likes-api.service";
-import { updateVendorFollow } from "@/services/vendor-follow-api.service";
-import { getVendorSavedState, updateVendorSavedState } from "@/services/vendor-saved-api.service";
-import { recordVendorPostShare } from "@/services/vendor-shares-api.service";
+import { getVendorPostsFromApi } from "@/services/vendor-posts-api.service";
 import { z } from "zod";
 
 const interactionSchema = z.object({
@@ -28,18 +25,6 @@ export async function POST(request: Request) {
   if (action === "follow") {
     const target = followInputSchema.safeParse({ shopId });
     if (!target.success) return NextResponse.json({ message: "Invalid shop." }, { status: 400 });
-    if (/^\d+$/.test(target.data.shopId)) {
-      const vendorId = Number(target.data.shopId);
-      const vendor = await sharedPrisma.sharedVendor.findUnique({ where: { id: vendorId }, select: { id: true } }).catch(() => null);
-      if (vendor) {
-        try {
-          const result = await updateVendorFollow(vendor.id, user.id, active ?? true);
-          return NextResponse.json({ active: result.followed ?? active ?? true, followerCount: result.followerCount });
-        } catch (error) {
-          return NextResponse.json({ message: error instanceof Error ? error.message : "Vendor follow could not be updated." }, { status: 503 });
-        }
-      }
-    }
     let shop: { id: string } | null;
     try {
       shop = await prisma.shop.findUnique({
@@ -85,6 +70,16 @@ export async function POST(request: Request) {
     } catch {
       return NextResponse.json({ message: "Interactions are temporarily unavailable." }, { status: 503 });
     }
+    if (!sharedPost) {
+      try {
+        const feed = await getVendorPostsFromApi(user.id);
+        const feedPost = feed.posts.find((post) => post.id === databasePostId);
+        const vendorId = Number(feedPost?.shopId);
+        if (feedPost && Number.isInteger(vendorId)) sharedPost = { id: Number(databasePostId), vendorId };
+      } catch {
+        return NextResponse.json({ message: "Could not verify this vendor post. Please try again." }, { status: 503 });
+      }
+    }
   }
   if (!localPost && !sharedPost) {
     return NextResponse.json({ message: "Post not found." }, { status: 404 });
@@ -105,13 +100,6 @@ export async function POST(request: Request) {
     if (action === "share") {
       const expectedShopId = localPost?.shopId ?? String(sharedPost!.vendorId);
       if (shopId !== expectedShopId) return NextResponse.json({ message: "Shop does not match this post." }, { status: 400 });
-      if (sharedPost) {
-        try {
-          return NextResponse.json(await recordVendorPostShare(sharedPost.id, user.id));
-        } catch (error) {
-          return NextResponse.json({ message: error instanceof Error ? error.message : "Share could not be saved." }, { status: 503 });
-        }
-      }
       await prisma.feedShare.createMany({ data: [
         { userId: user.id, targetType: "POST", targetId: databasePostId },
         { userId: user.id, targetType: "VENDOR", targetId: expectedShopId },
@@ -124,34 +112,16 @@ export async function POST(request: Request) {
     }
 
     if (sharedPost) {
-      if (action === "like") {
-        const externalUserId = await getSharedLikeUserId(user.id);
-        if (externalUserId === null) {
-          return NextResponse.json({ message: "Add a phone number linked to your vendor account before liking posts." }, { status: 400 });
-        }
-        const currentLikes = await getExternalLikesForPosts(user.id, [databasePostId]);
-        const current = currentLikes.get(databasePostId);
-        const nextActive = active ?? !current?.liked;
-        // Treat repeated requests for the same state as a no-op so one user
-        // cannot create duplicate likes (or delete an already-removed like).
-        const updated = current?.liked === nextActive
-          ? current
-          : await updateExternalLike(sharedPost.id, externalUserId, nextActive);
-        const saveCount = await prisma.feedInteraction.count({ where: { targetType: "POST", targetId: databasePostId, action: "SAVE", active: true } }).catch(() => 0);
-        return NextResponse.json({ active: nextActive, ...(updated ? { likeCount: updated.likeCount } : {}), saveCount });
-      }
-
-      if (action === "save") {
-        const current = await getVendorSavedState(databasePostId, user.id);
-        const nextActive = active ?? !current?.saved;
-        const updated = current?.saved === nextActive
-          ? current
-          : await updateVendorSavedState(sharedPost.id, user.id, nextActive);
-        const likeCount = (await getExternalLikesForPosts(user.id, [databasePostId])).get(databasePostId)?.likeCount ?? 0;
-        return NextResponse.json({ active: updated.saved, likeCount, saveCount: updated.savedCount });
-      }
-
-      return NextResponse.json({ message: "Unsupported vendor post interaction." }, { status: 400 });
+      const actionKey = action.toUpperCase();
+      const uniqueKey = { userId_targetType_targetId_action: { userId: user.id, targetType: "POST", targetId: databasePostId, action: actionKey } };
+      const existing = await prisma.feedInteraction.findUnique({ where: uniqueKey });
+      const nextActive = active ?? !existing?.active;
+      await prisma.feedInteraction.upsert({ where: uniqueKey, update: { active: nextActive }, create: { userId: user.id, targetType: "POST", targetId: databasePostId, action: actionKey, active: nextActive } });
+      const [likeCount, saveCount] = await Promise.all([
+        prisma.feedInteraction.count({ where: { targetType: "POST", targetId: databasePostId, action: "LIKE", active: true } }),
+        prisma.feedInteraction.count({ where: { targetType: "POST", targetId: databasePostId, action: "SAVE", active: true } }),
+      ]);
+      return NextResponse.json({ active: nextActive, likeCount, saveCount });
     }
 
     if (action === "like") {

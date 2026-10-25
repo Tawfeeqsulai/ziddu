@@ -15,9 +15,8 @@ import type { FeedPost } from "@/types/commerce";
 import type { ShopProfile } from "@/services/shop-profile.service";
 import type { PurchaseHistoryRecord } from "@/services/purchase-history.service";
 import MenuOrderExperience from "@/components/features/shop/menu-order-experience";
-import { useLoginPrompt } from "@/components/features/auth/login-prompt-provider";
 
-type ShopProfileExperienceProps = { profile: ShopProfile; authenticated: boolean; orders: PurchaseHistoryRecord[]; initialOrderId?: string };
+type ShopProfileExperienceProps = { profile: ShopProfile; authenticated: boolean; orders: PurchaseHistoryRecord[]; initialOrderId?: string; initialTab?: ShopSection };
 type PostFilter = "All" | "Poster" | "Videos";
 type ShopSection = "menu" | "offers" | "orders" | "posts";
 
@@ -35,15 +34,14 @@ function isPaidOrder(status: string) {
   return ["paid", "success", "completed"].includes(status.toLowerCase());
 }
 
-export default function ShopProfileExperience({ profile, authenticated, orders, initialOrderId }: ShopProfileExperienceProps) {
+export default function ShopProfileExperience({ profile, authenticated, orders, initialOrderId, initialTab }: ShopProfileExperienceProps) {
   const router = useRouter();
-  const { requireLogin } = useLoginPrompt();
   const { followed, followerCount, updateFollowed } = useFollowSync(
     profile.shop.id,
     Boolean(profile.shop.followed),
     profile.shop.followerCount,
   );
-  const [activeSection, setActiveSection] = useState<ShopSection>(initialOrderId ? "menu" : "posts");
+  const [activeSection, setActiveSection] = useState<ShopSection>(initialOrderId ? "menu" : initialTab ?? "posts");
   const [filter, setFilter] = useState<PostFilter>("All");
   const [pendingOfferPostId, setPendingOfferPostId] = useState<string | null>(null);
   const [liked, setLiked] = useState(() => profile.posts.filter((post) => post.liked).map((post) => post.id));
@@ -99,12 +97,6 @@ export default function ShopProfileExperience({ profile, authenticated, orders, 
     const bEnded = offerHasEnded(b.validUntil, offerCheckTime);
     return Number(aEnded) - Number(bEnded);
   });
-  const vendorBanner = /^\d+$/.test(profile.shop.id)
-    ? `https://zoggy-backend-api.vercel.app/banner?vendor_id=${encodeURIComponent(profile.shop.id)}`
-    : undefined;
-  const coverImages = [profile.shop.coverImage, vendorBanner]
-    .filter((image): image is string => Boolean(image));
-  const coverBackground = coverImages.map((image) => `url("${image.replace(/["\\]/g, "\\$&")}")`).join(", ");
 
   function openOfferPost(postId: string) {
     setFilter("All");
@@ -115,7 +107,7 @@ export default function ShopProfileExperience({ profile, authenticated, orders, 
 
   async function interact(action: "follow" | "like" | "save", id: string) {
     if (!authenticated) {
-      requireLogin();
+      router.push("/login");
       return;
     }
     setInteractionError("");
@@ -131,9 +123,9 @@ export default function ShopProfileExperience({ profile, authenticated, orders, 
       const response = await fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, active: !wasActive }) });
       if (response.status === 401) { router.push("/login"); throw new Error("Sign in required"); }
       if (!response.ok) throw new Error("Interaction unavailable");
-      const result = await response.json() as { active?: boolean; followerCount?: number };
-      if (typeof result.active === "boolean") update(result.active);
+      window.dispatchEvent(new Event("ziddu:feed-mutation"));
       if (action === "follow") {
+        const result = await response.json() as { active?: boolean; followerCount?: number };
         if (typeof result.followerCount === "number" && result.active === !wasActive) {
           publishFollowChange({ shopId: profile.shop.id, active: result.active, followerCount: result.followerCount });
         }
@@ -149,7 +141,6 @@ export default function ShopProfileExperience({ profile, authenticated, orders, 
   }
 
   async function shareShop() {
-    if (!authenticated) { requireLogin(); return; }
     const url = window.location.href;
     const text = `Check out ${profile.shop.name} on ZIDDU in ${profile.shop.area}, ${profile.shop.city}.`;
     setShareFeedback("");
@@ -170,15 +161,15 @@ export default function ShopProfileExperience({ profile, authenticated, orders, 
     <main className="shop-profile-page">
       {(interactionError || shareFeedback) && <p aria-live="polite" className="share-feedback" role="status">{interactionError || shareFeedback}</p>}
       <header className="shop-profile-topbar"><BackButton className="shop-back" label="Go back" /><Link aria-label="ZIDDU home" className="brand-lockup" href="/"><BrandLogo alt="" /></Link></header>
-      <div aria-label={`${profile.shop.name} cover image`} className="vendor-profile-cover" role="img" style={{ backgroundImage: coverBackground }} />
+      <div aria-label={`${profile.shop.name} cover image`} className="vendor-profile-cover" role="img" style={{ backgroundImage: `url("${profile.shop.coverImage || profile.posts[0]?.image || profile.shop.image}")` }}><div className="vendor-profile-cover-shade" /></div>
       <section className="shop-profile-header" aria-labelledby="shop-profile-name">
-        <div className="shop-profile-identity"><div className="shop-profile-avatar-column"><Avatar alt={profile.shop.name} image={profile.shop.image} initials={profile.shop.initials} size="lg" /><div className="shop-profile-rating"><Star aria-hidden="true" size={15} fill="currentColor" /> <strong>{profile.shop.rating.toFixed(1)}</strong>{profile.shop.distanceLabel && <span>· {profile.shop.distanceLabel}</span>}</div></div><div><h1 id="shop-profile-name">{profile.shop.name}</h1>{profile.shop.description && <span className="shop-profile-subtitle">{profile.shop.description}</span>}<div className="shop-profile-location"><MapPin size={14} /> {profile.shop.area || profile.shop.city || profile.shop.address}</div><div className="shop-profile-status"><span className={`shop-status-dot ${profile.shop.status === "Closed" ? "is-closed" : ""}`} /> <strong>{profile.shop.status}</strong><span>· {profile.shop.businessHours || "10 AM – 11 PM"}</span></div>{profile.visitCount !== undefined && <div className="shop-profile-visit-count">{profile.visitCount} visits through directions</div>}</div></div>
+        <div className="shop-profile-identity"><div className="shop-profile-avatar-column"><Avatar alt={profile.shop.name} image={profile.shop.image} initials={profile.shop.initials} size="lg" /><div className="shop-profile-rating"><Star aria-hidden="true" size={15} fill="currentColor" /> <strong>{profile.shop.rating.toFixed(1)}</strong>{profile.shop.distanceLabel && <span>· {profile.shop.distanceLabel}</span>}</div></div><div><h1 id="shop-profile-name">{profile.shop.name}</h1>{profile.shop.description && <span className="shop-profile-subtitle">{profile.shop.description}</span>}<div className="shop-profile-location"><MapPin size={14} /> {profile.shop.area || profile.shop.city || profile.shop.address}</div><div className="shop-profile-status"><span className={`shop-status-dot ${profile.shop.status === "Closed" ? "is-closed" : ""}`} /> <strong>{profile.shop.status}</strong><span>· {profile.shop.businessHours || "10 AM – 11 PM"}</span></div></div></div>
         {profile.shop.workingHours && <details className="shop-weekly-hours"><summary>Weekly hours</summary><div className="shop-weekly-hours-list">{([ ["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"] ] as const).map(([day, label]) => { const hours = profile.shop.workingHours?.[day]; const from = hours?.from?.replace(/\b(am|pm)\b/gi, (period) => period.toUpperCase()); const to = hours?.to?.replace(/\b(am|pm)\b/gi, (period) => period.toUpperCase()); return <div className="shop-weekly-hours-row" key={day}><strong>{label}</strong><span>{!hours ? "Hours unavailable" : !hours.enabled ? "Closed" : from && to ? `${from} – ${to}` : "Hours unavailable"}</span></div>; })}</div></details>}
         <div className="shop-profile-quick-actions">
           <button aria-label={`${followed ? "Unfollow" : "Follow"} ${profile.shop.name}`} aria-pressed={followed} className={`shop-quick-action shop-profile-follow${followed ? " is-active" : ""}`} onClick={() => { void interact("follow", profile.shop.id); }} type="button">{followed ? <UserRoundCheck size={22} /> : <UserRoundPlus size={22} />}<span>{followed ? "Following" : "Follow"}</span></button>
           <a aria-label={`Call ${profile.shop.name}`} className="shop-quick-action" href={profile.shop.phone ? `tel:${profile.shop.phone.replace(/\s/g, "")}` : undefined}><Phone size={22} /><span>Call</span></a>
           <button aria-label="Share shop" className="shop-quick-action" onClick={() => { void shareShop(); }} type="button"><Share2 size={22} /><span>Share</span></button>
-          <DirectionsButton className="shop-quick-action shop-profile-location-action" compact icon="pin" label="Location" postId={profile.posts[0]?.id} shop={profile.shop} />
+          <DirectionsButton className="shop-quick-action shop-profile-location-action" compact icon="pin" label="Location" shop={profile.shop} />
         </div>
       </section>
       {/* <div className="shop-profile-contact"><span><MapPin size={15} />{profile.shop.address}{profile.shop.pincode ? `, ${profile.shop.pincode}` : ""}</span></div> */}
@@ -204,7 +195,7 @@ export default function ShopProfileExperience({ profile, authenticated, orders, 
           <div className="shop-order-bill-date">{order.date ? new Date(order.date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Date unavailable"}</div>
           <div className="shop-order-subtotal"><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
           <div className="shop-order-total"><span>Total</span><strong>{money(order.total)}</strong></div>
-          <button className="shop-order-add" disabled={!canUpdate} onClick={() => { if (!authenticated) { requireLogin(); return; } setOrderToUpdate(order); setActiveSection("menu"); }} type="button">Add More Items</button>
+          <button className="shop-order-add" disabled={!authenticated || !canUpdate} onClick={() => { setOrderToUpdate(order); setActiveSection("menu"); }} type="button">Add More Items</button>
         </article>;
       })}</div>}</section>}
     </main>

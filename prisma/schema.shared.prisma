@@ -17,7 +17,6 @@ model SharedUser {
   updatedAt   DateTime? @map("updated_at") @db.Timestamp(0)
   vendors     SharedVendor[]
   bills       SharedBill[]
-  walkins     SharedWalkin[]
 
   @@map("users")
 }
@@ -41,7 +40,6 @@ model SharedVendor {
   menuItems        SharedMenuItem[]
   offers           SharedOffer[]
   bills            SharedBill[]
-  walkins          SharedWalkin[]
 
   @@unique([userId])
   @@index([userId])
@@ -151,24 +149,4 @@ model SharedBill {
   @@index([vendorId])
   @@index([endUserId])
   @@map("bills")
-}
-
-// One row each time a signed-in customer following in-app directions arrives
-// within the arrival radius of a vendor. The vendor app counts these rows.
-model SharedWalkin {
-  id             Int       @id @default(autoincrement())
-  vendorId       Int       @map("vendor_id")
-  endUserId      Int?      @map("end_user_id")
-  appUserId      String    @map("app_user_id") @db.VarChar(64)
-  latitude       Decimal   @db.Decimal(10, 7)
-  longitude      Decimal   @db.Decimal(10, 7)
-  distanceMeters Int       @map("distance_meters")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  vendor         SharedVendor @relation(fields: [vendorId], references: [id])
-  endUser        SharedUser?  @relation(fields: [endUserId], references: [id], onDelete: SetNull)
-
-  @@index([vendorId, createdAt])
-  @@index([appUserId, vendorId, createdAt])
-  @@index([endUserId])
-  @@map("walkins")
 }
