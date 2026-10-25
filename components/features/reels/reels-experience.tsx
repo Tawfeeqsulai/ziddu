@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Check, Clapperboard, Compass, Home, UserRound } fro
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useLoginPrompt } from "@/components/features/auth/login-prompt-provider";
 import { BottomNavigation } from "@/components/ui/bottom-navigation";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { SocialActions } from "@/components/ui/social-actions";
@@ -16,6 +17,7 @@ type ReelsExperienceProps = { initial: ReelsResult; authenticated: boolean };
 
 export default function ReelsExperience({ initial, authenticated }: ReelsExperienceProps) {
   const router = useRouter();
+  const { requireLogin } = useLoginPrompt();
   const [items, setItems] = useState<ReelItem[]>(initial.reels);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(initial.hasMore);
@@ -43,7 +45,7 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
   }, [items.length]);
 
   async function interact(action: "like" | "save" | "follow", id: string) {
-    if (!authenticated) return router.push("/login");
+    if (!authenticated) { requireLogin(); return; }
     setInteractionError("");
     const update = action === "like" ? setLiked : action === "save" ? setSaved : setFollowed;
     const wasActive = (action === "like" ? liked : action === "save" ? saved : followed).includes(id);
@@ -52,7 +54,13 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
     try {
       const response = await fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, active: !wasActive }) });
       if (!response.ok) throw new Error("Interaction unavailable");
-      window.dispatchEvent(new Event("ziddu:feed-mutation"));
+      const result = await response.json() as { active?: boolean };
+      if (typeof result.active === "boolean") {
+        const confirmedActive = result.active;
+        update((current) => confirmedActive
+          ? current.includes(id) ? current : [...current, id]
+          : current.filter((item) => item !== id));
+      }
     } catch {
       update((current) => wasActive ? [...current.filter((item) => item !== id), id] : current.filter((item) => item !== id));
       setInteractionError("That action could not be saved. Please try again.");
@@ -60,18 +68,18 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
   }
 
   async function share(postId: string, shopId: string, shopName: string) {
+    if (!authenticated) { requireLogin(); return; }
     const sharePath = getPostSharePath(postId) ?? `/shops/${encodeURIComponent(shopId)}`;
     const url = new URL(sharePath, window.location.origin).toString();
-    setShareCounts((current) => ({ ...current, [postId]: (current[postId] ?? 0) + 1 }));
-    void fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "share", postId, shopId }) })
-      .then((response) => { if (!response.ok) throw new Error("Share count unavailable"); window.dispatchEvent(new Event("ziddu:feed-mutation")); })
-      .catch(() => setShareCounts((current) => ({ ...current, [postId]: Math.max(0, (current[postId] ?? 1) - 1) })));
     try {
       if (navigator.share) await navigator.share({ title: shopName, text: `Discover ${shopName} on ZIDDU.`, url });
       else { await navigator.clipboard.writeText(url); setInteractionError("Link copied"); }
+      const response = await fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "share", postId, shopId }) });
+      if (!response.ok) throw new Error("Share count unavailable");
+      setShareCounts((current) => ({ ...current, [postId]: (current[postId] ?? 0) + 1 }));
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setInteractionError("Could not share link");
+      setInteractionError(error instanceof Error && error.message === "Share count unavailable" ? "Shared, but the share count could not be saved" : "Could not share link");
     }
   }
 
@@ -93,7 +101,7 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
   }
 
   if (error && items.length === 0) return <main className="reels-page"><ErrorState description="Please try again in a moment." onAction={() => window.location.reload()} title="Couldn't load Videos" /></main>;
-  if (items.length === 0) return <main className="reels-page"><EmptyState description="Check back later for new videos from local businesses." title="No Videos nearby yet" /></main>;
+  if (items.length === 0) return <main className="reels-page reels-empty-page"><EmptyState description="Check back later for new videos from local businesses." title="No Videos nearby yet" /></main>;
 
   return <main className="reels-page">
     <div className="reels-scroll" onScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight > element.scrollHeight - element.clientHeight * 1.5) void loadMore(); }}>
@@ -101,7 +109,7 @@ export default function ReelsExperience({ initial, authenticated }: ReelsExperie
         {failedVideos.includes(post.id) ? <div className="reel-video-failure"><span>Video couldn&apos;t connect</span><small>{shop.name} · {shop.area}, {shop.city}</small><button onClick={() => setFailedVideos((current) => current.filter((id) => id !== post.id))} type="button">Try again</button></div> : <ReelVideoPlayer alt={post.imageAlt} onError={() => setFailedVideos((current) => current.includes(post.id) ? current : [...current, post.id])} onLike={() => { void interact("like", post.id); }} poster={post.image} src={post.mediaUrl!} />}
         <div className="reels-scrim" aria-hidden="true" />
         {post.price !== undefined && <div className="reels-offer reels-offer-top"><strong>{post.badge ?? "Local offer"}</strong><b>{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(post.price)}</b></div>}
-        <div className="reels-actions"><SocialActions accessibleName={`Video from ${shop.name}`} likeCount={Math.max(0, post.likes + (liked.includes(post.id) === Boolean(post.liked) ? 0 : liked.includes(post.id) ? 1 : -1))} liked={liked.includes(post.id)} onLike={() => { void interact("like", post.id); }} onSave={() => { void interact("save", post.id); }} onShare={() => { void share(post.id, shop.id, shop.name); }} saveCount={Math.max(0, (post.saves ?? 0) + (saved.includes(post.id) === Boolean(post.saved) ? 0 : saved.includes(post.id) ? 1 : -1))} saved={saved.includes(post.id)} shareCount={(post.shares ?? 0) + (shareCounts[post.id] ?? 0)} overlay trailingAction={<DirectionsButton className="reels-location" compact icon="pin" label="Direction" shop={shop} />} /></div>
+        <div className="reels-actions"><SocialActions accessibleName={`Video from ${shop.name}`} likeCount={Math.max(0, post.likes + (liked.includes(post.id) === Boolean(post.liked) ? 0 : liked.includes(post.id) ? 1 : -1))} liked={liked.includes(post.id)} onLike={() => { void interact("like", post.id); }} onSave={() => { void interact("save", post.id); }} onShare={() => { void share(post.id, shop.id, shop.name); }} saveCount={Math.max(0, (post.saves ?? 0) + (saved.includes(post.id) === Boolean(post.saved) ? 0 : saved.includes(post.id) ? 1 : -1))} saved={saved.includes(post.id)} shareCount={(post.shares ?? 0) + (shareCounts[post.id] ?? 0)} overlay trailingAction={<DirectionsButton className="reels-location" compact icon="pin" label="Direction" postId={post.id} shop={shop} />} /></div>
         <div className="reels-info"><div className="reels-business"><Link aria-label={`Open ${shop.name}`} href={`/shops/${shop.id}`}><span className="reels-avatar">{shop.initials}</span><strong>{shop.name}</strong></Link><button className={followed.includes(shop.id) ? "is-following" : ""} onClick={() => { void interact("follow", shop.id); }} type="button">{followed.includes(shop.id) ? <><Check size={13} /> Following</> : "Follow"}</button></div></div>
       </article>)}
       {loadingMore && <div className="reels-loading-more">Loading more Videos...</div>}

@@ -105,12 +105,11 @@ export function PostActions({ liked, saved, shop, post, onLike, onSave, engageme
       if (!response.ok) throw new Error("Direction count unavailable");
       const result = await response.json() as { directionCount?: number };
       if (typeof result.directionCount === "number") setDirectionCount(result.directionCount);
-      window.dispatchEvent(new Event("ziddu:feed-mutation"));
     }).catch(() => setDirectionCount((count) => Math.max(0, count - 1)));
   }
   return (
     <div className={`social-post-actions ${overlay ? "reel-actions" : ""}`}>
-      <SocialActions accessibleName={`${overlay ? "Reel" : "post"} from ${shop.name}`} likeCount={likeCount} liked={liked} onLike={onLike} onSave={onSave} onShare={engagement.onShare} overlay={overlay} saveCount={saveCount} saved={saved} shareCount={engagement.shareCount} trailingAction={<DirectionsButton className={overlay ? "social-action post-direction-action" : "post-direction-button"} compact icon="pin" label={overlay ? "Direction" : "Get directions"} count={directionCount} onClick={recordDirection} shop={shop} />} />
+      <SocialActions accessibleName={`${overlay ? "Reel" : "post"} from ${shop.name}`} likeCount={likeCount} liked={liked} onLike={onLike} onSave={onSave} onShare={engagement.onShare} overlay={overlay} saveCount={saveCount} saved={saved} shareCount={engagement.shareCount} trailingAction={<DirectionsButton className={overlay ? "social-action post-direction-action" : "post-direction-button"} compact icon="pin" label={overlay ? "Direction" : "Get directions"} count={directionCount} onClick={recordDirection} postId={post.id} shop={shop} />} />
     </div>
   );
 }
@@ -167,18 +166,23 @@ function formatOfferCountdown(validUntil: string, now: number) {
 
 function OfferNotice({ validUntil, label }: { validUntil?: string; label?: string }) {
   const [now, setNow] = useState<number | null>(null);
+  const [deadline, setDeadline] = useState<number | null>(null);
   useEffect(() => {
+    const offerExpiry = validUntil ? new Date(validUntil).getTime() : Number.NaN;
+    setDeadline(Number.isFinite(offerExpiry) ? offerExpiry : Date.now() + 12 * 60 * 60 * 1_000);
     const update = () => setNow(Date.now());
     update();
     const timer = window.setInterval(update, 1_000);
     return () => window.clearInterval(timer);
-  }, []);
-  const countdown = validUntil && now !== null ? formatOfferCountdown(validUntil, now) : "Limited time";
+  }, [validUntil]);
+  const countdown = deadline !== null && now !== null
+    ? formatOfferCountdown(new Date(deadline).toISOString(), now)
+    : "Ends in 12h 0m 0s";
   const countdownLabel = countdown.startsWith("Ends in ")
     ? <>Ends in <b>{countdown.slice("Ends in ".length)}</b></>
     : countdown;
   return <div aria-label={`Offer: ${label || "Special deal"}. ${countdown}`} className="post-offer-banner" role="timer">
-    <strong>OFFER</strong>
+    <strong>OFFER HOURS</strong>
     <span>{countdownLabel}</span>
     <em className="post-offer-deal">{label || "Special Deal"}</em>
   </div>;
@@ -197,8 +201,9 @@ function OfferEndedWatermark({ validUntil }: { validUntil?: string }) {
 }
 
 export function ImagePost(props: PostPresentationProps) {
-  const { post, shop, engagement, hideFollow = false, onLike } = props;
+  const { post, shop, engagement, hideFollow = false, liked, onLike } = props;
   const lastMediaTap = useRef(0);
+  const showOfferBanner = post.kind === "offer" || shop.category === "RESTAURANT";
   return (
     <PostContainer className="social-post image-post" variant="image">
       <PostHeader {...props} hideFollow={hideFollow} />
@@ -208,15 +213,15 @@ export function ImagePost(props: PostPresentationProps) {
         if (now - lastMediaTap.current < 350) {
           event.preventDefault();
           lastMediaTap.current = 0;
-          onLike();
+          if (!liked) onLike();
         } else {
           lastMediaTap.current = now;
         }
       }}>
         <Image alt={post.imageAlt} fill loading="lazy" sizes="(max-width: 620px) 100vw, 680px" src={post.image} unoptimized />
-        {post.kind === "offer" && <OfferEndedWatermark validUntil={post.offerValidUntil} />}
+        {showOfferBanner && post.kind === "offer" && <OfferEndedWatermark validUntil={post.offerValidUntil} />}
       </div>
-      {post.kind === "offer" && <OfferNotice label={post.badge} validUntil={post.offerValidUntil} />}
+      {showOfferBanner && <OfferNotice label={post.badge ?? (shop.category === "RESTAURANT" ? "50% OFF" : undefined)} validUntil={post.offerValidUntil} />}
       <div className="social-post-body">
         <PostActions {...props} engagement={engagement} />
         <div className="post-location-time">
@@ -247,6 +252,7 @@ function ReelVideo({ post, muted, videoRef }: { post: FeedPost; muted: boolean; 
 
 export function VideoPost(props: PostPresentationProps) {
   const { post, shop, followed, liked, saved, onFollow, onLike, onSave, onOpenShop, onCheckout, engagement, hideFollow = false } = props;
+  const showOfferBanner = post.kind === "offer" || shop.category === "RESTAURANT";
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const openVideoTimer = useRef<number | null>(null);
@@ -270,7 +276,7 @@ export function VideoPost(props: PostPresentationProps) {
     } else if (position > 2 / 3) {
       if (video && Number.isFinite(video.duration)) video.currentTime = Math.min(video.duration, video.currentTime + 10);
     } else {
-      onLike();
+      if (!liked) onLike();
     }
   }
 
@@ -290,7 +296,7 @@ export function VideoPost(props: PostPresentationProps) {
         }, 350);
       }}>
         <Image alt={post.imageAlt} className="reel-poster" fill loading="lazy" sizes="(max-width: 620px) 100vw, 420px" src={post.image} unoptimized />
-        {post.kind === "offer" && <OfferEndedWatermark validUntil={post.offerValidUntil} />}
+        {showOfferBanner && post.kind === "offer" && <OfferEndedWatermark validUntil={post.offerValidUntil} />}
         {post.mediaUrl && <ReelVideo muted={muted} post={post} videoRef={videoRef} />}
         <button aria-label={muted ? "Unmute video" : "Mute video"} className="reel-sound-button" onClick={toggleSound} type="button">{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
         <div aria-hidden="true" className="reel-readability-shade" />
@@ -309,7 +315,7 @@ export function VideoPost(props: PostPresentationProps) {
           onCheckout={onCheckout}
         />
         <div className="reel-bottom-info">
-          {post.kind === "offer" && <OfferNotice label={post.badge} validUntil={post.offerValidUntil} />}
+          {showOfferBanner && <OfferNotice label={post.badge ?? (shop.category === "RESTAURANT" ? "50% OFF" : undefined)} validUntil={post.offerValidUntil} />}
           <div className="reel-business-line">
             <button className="reel-shop-name" onClick={onOpenShop} type="button">
               <ShopAvatar shop={shop} size={38} />

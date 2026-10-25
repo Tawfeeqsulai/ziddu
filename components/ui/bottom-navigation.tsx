@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { Bookmark, Clapperboard, Home, Search, Sparkles, type LucideIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useLoginPrompt } from "@/components/features/auth/login-prompt-provider";
 
 type NavigationItem = { label: string; icon: LucideIcon; active?: boolean; onClick?: () => void };
 type MainTab = "Home" | "Search" | "Videos" | "Saved";
@@ -23,6 +24,12 @@ export function BottomNavigation({ items = defaultItems, global = false, showPro
   const inAppNavigation = useContext(AppNavigationContext);
   const pathname = usePathname() ?? "";
   const router = useRouter();
+  const { authenticated, requireLogin } = useLoginPrompt();
+  // Touch screens never hover, so warm every tab up front for instant switching.
+  useEffect(() => {
+    if (!global) return;
+    [...Object.values(tabRoutes), "/ai"].forEach((route) => router.prefetch(route));
+  }, [global, router]);
   if (inAppNavigation && !global) return null;
 
   const navigationItemsSource = global
@@ -60,7 +67,8 @@ export function BottomNavigation({ items = defaultItems, global = false, showPro
     {navigationItems.map(({ label, icon: Icon, active, onClick }) => {
       const route = global && label in tabRoutes ? tabRoutes[label as MainTab] : global && label === "ZIDDU AI" ? "/ai" : undefined;
       const prefetchRoute = () => { if (route) router.prefetch(route); };
-      return <button aria-current={active ? "page" : undefined} className={[active ? "is-active" : "", label === "ZIDDU AI" ? "is-ai" : ""].filter(Boolean).join(" ")} key={label} onClick={onClick} onFocus={prefetchRoute} onPointerEnter={prefetchRoute} type="button"><span className="ui-bottom-navigation-icon"><Icon aria-hidden="true" size={label === "ZIDDU AI" ? 34 : 25} /></span><span>{label === "ZIDDU AI" ? "Ziddu AI" : label}</span></button>;
+      const needsLogin = ["Videos", "Saved", "Profile", "ZIDDU AI"].includes(label);
+      return <button aria-current={active ? "page" : undefined} className={[active ? "is-active" : "", label === "ZIDDU AI" ? "is-ai" : ""].filter(Boolean).join(" ")} key={label} onClick={() => { if (needsLogin && !authenticated && !requireLogin()) return; onClick?.(); }} onFocus={prefetchRoute} onPointerEnter={prefetchRoute} type="button"><span className="ui-bottom-navigation-icon"><Icon aria-hidden="true" size={label === "ZIDDU AI" ? 34 : 25} /></span><span>{label === "ZIDDU AI" ? "Ziddu AI" : label}</span></button>;
     })}
   </nav>;
 }
@@ -68,6 +76,7 @@ export function BottomNavigation({ items = defaultItems, global = false, showPro
 export function AppNavigation({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
+  const { authenticated } = useLoginPrompt();
   const restoredInitialTab = useRef(false);
   const showNavigation = bottomNavigationRoutes.has(pathname) || pathname.startsWith("/shops/");
 
@@ -77,10 +86,10 @@ export function AppNavigation({ children }: { children: ReactNode }) {
     if (pathname !== "/") return;
 
     const savedTab = window.localStorage.getItem(lastTabStorageKey);
-    if (savedTab && savedTab in tabRoutes && savedTab !== "Home") {
+    if (savedTab && savedTab in tabRoutes && savedTab !== "Home" && (authenticated || savedTab === "Search")) {
       router.replace(tabRoutes[savedTab as MainTab]);
     }
-  }, [pathname, router]);
+  }, [authenticated, pathname, router]);
 
   return (
     <AppNavigationContext.Provider value>

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db/prisma";
-import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
 import { normalizeBusinessCategory, type FeedPost, type Shop } from "@/types/commerce";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
@@ -8,6 +7,10 @@ import { mergeHashtags } from "@/lib/hashtag";
 import { formatOfferLabel } from "@/lib/offer-label";
 import { offerPricing, type OfferPricing } from "@/lib/offer-pricing";
 import { getExternalLikesForPosts } from "@/services/likes-api.service";
+import { getVendorFollowState } from "@/services/vendor-follow-api.service";
+import { getVendorSavedStates } from "@/services/vendor-saved-api.service";
+import { getVendorPostShareCounts } from "@/services/vendor-shares-api.service";
+import { getVendorDirectionStats } from "@/services/vendor-directions-api.service";
 
 type OfferValue = { priceInr?: number; originalPriceInr?: number; badge?: string };
 
@@ -16,7 +19,7 @@ export type ShopProduct = { id: string; name: string; description: string; image
 export type VendorWeekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 export type VendorDailyHours = { enabled: boolean; from: string | null; to: string | null };
 export type VendorWeeklyHours = Partial<Record<VendorWeekday, VendorDailyHours>>;
-export type ShopProfile = { shop: Shop & { description: string; pincode?: string; followerCount: number; workingDays: string[]; workingHours?: VendorWeeklyHours; distanceLabel: string }; posts: FeedPost[]; offers: ShopOffer[]; products: ShopProduct[] };
+export type ShopProfile = { shop: Shop & { description: string; pincode?: string; followerCount: number; workingDays: string[]; workingHours?: VendorWeeklyHours; distanceLabel: string }; posts: FeedPost[]; offers: ShopOffer[]; products: ShopProduct[]; visitCount?: number };
 
 const VENDOR_WEEKDAYS: VendorWeekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
@@ -80,7 +83,7 @@ function getOfferValues(value: unknown): OfferValue {
 async function getSharedShopProfile(id: string, userId?: string): Promise<ShopProfile | null> {
   const vendorId = Number.parseInt(id, 10);
   if (!Number.isInteger(vendorId)) return null;
-  let record = await sharedPrisma.sharedVendor.findUnique({
+  let record = await prisma.sharedVendor.findUnique({
     where: { id: vendorId },
     include: {
       user: true,
@@ -90,9 +93,9 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
     },
   });
   if (!record) {
-    const linkedPost = await sharedPrisma.sharedPost.findUnique({ where: { id: vendorId }, select: { vendorId: true } });
+    const linkedPost = await prisma.sharedPost.findUnique({ where: { id: vendorId }, select: { vendorId: true } });
     if (linkedPost) {
-      record = await sharedPrisma.sharedVendor.findUnique({
+      record = await prisma.sharedVendor.findUnique({
         where: { id: linkedPost.vendorId },
         include: {
           user: true,
@@ -105,17 +108,23 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
   }
   if (!record) return null;
 
-  const viewer = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { city: true, locality: true, latitude: true, longitude: true } }) : null;
+  const [viewer, followState, directionStats] = await Promise.all([
+    userId ? prisma.user.findUnique({ where: { id: userId }, select: { city: true, locality: true, latitude: true, longitude: true } }).catch(() => null) : Promise.resolve(null),
+    getVendorFollowState(record.id, userId).catch(() => null),
+    getVendorDirectionStats(record.id).catch(() => null),
+  ]);
   const postIds = record.posts.map((post) => String(post.id));
   const engagementClient = prisma as unknown as {
     feedInteraction?: typeof prisma.feedInteraction;
     feedShare?: typeof prisma.feedShare;
   };
-  const [interactions, shares, externalLikes] = postIds.length > 0 ? await Promise.all([
+  const [interactions, shares, externalLikes, externalSaves, externalShareCounts] = postIds.length > 0 ? await Promise.all([
     engagementClient.feedInteraction ? engagementClient.feedInteraction.findMany({ where: { targetType: "POST", targetId: { in: postIds }, active: true }, select: { targetId: true, userId: true, action: true } }).catch(() => []) : Promise.resolve([]),
     engagementClient.feedShare ? engagementClient.feedShare.groupBy({ by: ["targetId"], where: { targetType: "POST", targetId: { in: postIds } }, _count: { _all: true } }).catch(() => []) : Promise.resolve([]),
     getExternalLikesForPosts(userId, postIds),
-  ]) : [[], [], new Map()];
+    getVendorSavedStates(postIds, userId),
+    getVendorPostShareCounts([record.id]),
+  ]) : [[], [], new Map(), new Map(), new Map()];
   const engagementByPost = new Map<string, { likes: number; saves: number; directions: number; liked: boolean; saved: boolean }>();
   for (const interaction of interactions) {
     const summary = engagementByPost.get(interaction.targetId) ?? { likes: 0, saves: 0, directions: 0, liked: false, saved: false };
@@ -138,7 +147,7 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
     id: String(record.id), name, handle: `vendor-${record.id}`, category, distance: formatDistanceKm(haversineDistanceKm(viewer ?? {}, location)) ?? "Nearby", area: location.locality, city: location.city, state: "",
     status: isVendorOpenNow(record.status, workingHours, new Date()) ? "Open now" : "Closed", businessHours, rating: 0,
     initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(), image: record.logoUrl || "/ziddu-logo.png",
-    address: location.address, owner: "", phone: record.user.phoneNumber || undefined, description: "", followerCount: 0,
+    address: location.address, owner: "", phone: record.user.phoneNumber || undefined, description: "", followed: followState?.followed ?? false, followerCount: followState?.followerCount ?? 0,
     latitude: location.latitude, longitude: location.longitude,
     workingDays: workingHours ? VENDOR_WEEKDAYS.filter((day) => workingHours[day]?.enabled) : readStringArray(record.workingDays), workingHours, distanceLabel: formatDistanceKm(haversineDistanceKm(viewer ?? {}, location)) ? `${formatDistanceKm(haversineDistanceKm(viewer ?? {}, location))} away` : "Nearby",
   };
@@ -150,12 +159,13 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
     const productName = post.offer?.offerTargetId && (!targetType || /ITEM|PRODUCT/.test(targetType)) ? record.menuItems.find((item) => item.id === post.offer?.offerTargetId)?.productName : undefined;
     const engagement = engagementByPost.get(String(post.id));
     const externalLike = externalLikes.get(String(post.id));
+    const externalSave = externalSaves.get(String(post.id));
     return {
       id: String(post.id), shopId: String(record.id), kind: post.isOfferIncluded ? "offer" as const : mediaType === "video" ? "reel" as const : "post" as const,
-      title, description: `${name} shared a new ${post.postCategory || "post"}.`, image: post.postUrl, imageAlt: title, likes: externalLike?.likeCount ?? engagement?.likes ?? 0, saves: engagement?.saves ?? 0, shares: shareCounts.get(String(post.id)) ?? 0, directionCount: engagement?.directions ?? 0,
+      title, description: `${name} shared a new ${post.postCategory || "post"}.`, image: post.postUrl, imageAlt: title, likes: externalLike?.likeCount ?? engagement?.likes ?? 0, saves: externalSave?.savedCount ?? engagement?.saves ?? 0, shares: externalShareCounts.get(String(post.id)) ?? shareCounts.get(String(post.id)) ?? 0, directionCount: engagement?.directions ?? 0,
       publishedAt: (post.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? post.postUrl : undefined,
       hashtags: mergeHashtags(post.postCategory ? [`#${post.postCategory.replace(/\s+/g, "")}`] : [], productName), price: values.priceInr,
-      originalPrice: values.originalPriceInr, badge: post.isOfferIncluded ? formatOfferLabel({ offerType: post.offer?.offerType, offerValue: post.offer?.offerValue, badge: values.badge, productName, price: values.priceInr, originalPrice: values.originalPriceInr, category: post.postCategory }) : undefined, offerValidUntil: post.offer?.validityTo?.toISOString(), liked: externalLike?.liked ?? engagement?.liked ?? false, saved: engagement?.saved ?? false,
+      originalPrice: values.originalPriceInr, badge: post.isOfferIncluded ? formatOfferLabel({ offerType: post.offer?.offerType, offerValue: post.offer?.offerValue, badge: values.badge, productName, price: values.priceInr, originalPrice: values.originalPriceInr, category: post.postCategory }) : undefined, offerValidUntil: post.offer?.validityTo?.toISOString(), liked: externalLike?.liked ?? engagement?.liked ?? false, saved: externalSave?.saved ?? engagement?.saved ?? false,
     };
   });
   const offers: ShopOffer[] = record.offers.map((offer) => {
@@ -181,7 +191,7 @@ async function getSharedShopProfile(id: string, userId?: string): Promise<ShopPr
       offer: activeOffer ? { ...offerPricing(activeOffer.offerType, activeOffer.offerValue), badge: formatOfferLabel({ offerType: activeOffer.offerType, offerValue: activeOffer.offerValue, badge: values.badge, productName: item.productName, price: values.priceInr, originalPrice: values.originalPriceInr }) } : undefined,
     };
   });
-  return { shop, posts, offers, products };
+  return { shop, posts, offers, products, visitCount: directionStats?.totalClicks };
 }
 
 export async function getShopProfile(id: string, userId?: string): Promise<ShopProfile | null> {

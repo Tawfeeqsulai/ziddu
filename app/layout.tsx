@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { AppNavigation } from "@/components/ui/bottom-navigation";
-import { RealtimeUpdates } from "@/components/ui/realtime-updates";
+import { LoginPromptProvider } from "@/components/features/auth/login-prompt-provider";
+import { PullToRefresh } from "@/components/ui/pull-to-refresh";
+import { getCurrentUser } from "@/lib/auth/session";
 import "./globals.css";
 import "./desktop.css";
 
@@ -9,7 +11,9 @@ export const metadata: Metadata = {
   description: "Meet the shops, people and little finds in your neighborhood.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const user = await getCurrentUser();
+
   return (
     <html lang="en" className="h-full antialiased" data-theme="light" suppressHydrationWarning>
       <head>
@@ -19,7 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-full"><RealtimeUpdates /><AppNavigation>{children}</AppNavigation></body>
+      <body className="min-h-full"><LoginPromptProvider authenticated={Boolean(user)}><PullToRefresh /><AppNavigation>{children}</AppNavigation></LoginPromptProvider></body>
     </html>
   );
 }

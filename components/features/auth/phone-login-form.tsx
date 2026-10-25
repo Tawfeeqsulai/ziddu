@@ -54,9 +54,10 @@ export default function PhoneLoginForm({ developmentOtp }: PhoneLoginFormProps) 
         body: JSON.stringify({ phoneNumber: phone }),
       });
       if (!response.ok) {
-        setError(response.status === 429
-          ? "Please wait before requesting another code."
-          : "We couldn't send a code just now. Check the number and try again.");
+        const result = await response.json().catch(() => null) as { message?: string } | null;
+        setError(response.status >= 500
+          ? "Our server is busy right now. Please try again in a moment."
+          : result?.message || (response.status === 429 ? "Please wait before requesting another code." : "Check the number and try again."));
         return false;
       }
       setNormalizedPhone(phone);

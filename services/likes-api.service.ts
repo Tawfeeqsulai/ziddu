@@ -1,8 +1,8 @@
 import "server-only";
+import { cache } from "react";
 
 import { normalizeIndianPhone } from "@/lib/auth/phone";
 import { prisma } from "@/lib/db/prisma";
-import { sharedPrisma } from "@/lib/db/shared-prisma";
 
 const LIKES_API = "https://zoggy-backend-api.vercel.app/api/likes";
 
@@ -30,7 +30,8 @@ function readLikeRecord(value: unknown): { postId: string; state: ExternalLikeSt
   };
 }
 
-export async function getSharedLikeUserId(appUserId?: string): Promise<number | null> {
+// Cached per request: likes, saves and every vendor's follow state need the same lookup.
+export const getSharedLikeUserId = cache(async (appUserId?: string): Promise<number | null> => {
   if (!appUserId) return null;
   const account = await prisma.user.findUnique({ where: { id: appUserId }, select: { phoneNumber: true } });
   const normalizedPhone = normalizeIndianPhone(account?.phoneNumber ?? "");
@@ -38,12 +39,12 @@ export async function getSharedLikeUserId(appUserId?: string): Promise<number | 
 
   const nationalNumber = normalizedPhone.slice(3);
   const phoneVariants = [normalizedPhone, nationalNumber, `91${nationalNumber}`, `0${nationalNumber}`];
-  const sharedUser = await sharedPrisma.sharedUser.findFirst({
+  const sharedUser = await prisma.sharedUser.findFirst({
     where: { phoneNumber: { in: phoneVariants } },
     select: { id: true },
   });
   return sharedUser?.id ?? null;
-}
+});
 
 export async function getExternalLikesForPosts(appUserId: string | undefined, postIds: string[]): Promise<Map<string, ExternalLikeState>> {
   const ids = [...new Set(postIds.filter((id) => /^\d+$/.test(id)))];
@@ -54,7 +55,8 @@ export async function getExternalLikesForPosts(appUserId: string | undefined, po
     const query = new URLSearchParams();
     if (sharedUserId !== null) query.set("user_id", String(sharedUserId));
     const response = await fetch(`${LIKES_API}${query.size ? `?${query}` : ""}`, {
-      cache: "no-store",
+      // Anonymous counts are the same for everyone, so share them briefly.
+      ...(sharedUserId === null ? { next: { revalidate: 5 } } : { cache: "no-store" as const }),
       signal: AbortSignal.timeout(8_000),
       headers: { Accept: "application/json" },
     });

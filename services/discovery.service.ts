@@ -1,13 +1,15 @@
-import { normalizeBusinessCategory, type DiscoveryData } from "@/types/commerce";
+import { normalizeBusinessCategory, type DiscoveryData, type Shop } from "@/types/commerce";
 import { prisma } from "@/lib/db/prisma";
-import { sharedPrisma } from "@/lib/db/shared-prisma";
 import { readStringArray } from "@/lib/db/json";
 import { formatDistanceKm, haversineDistanceKm } from "@/lib/location";
 import { normalizeVendorLocation } from "@/lib/vendor-location";
 import { mergeHashtags } from "@/lib/hashtag";
 import { formatOfferLabel } from "@/lib/offer-label";
-import { getVendorPostsFromApi } from "@/services/vendor-posts-api.service";
 import { getExternalLikesForPosts } from "@/services/likes-api.service";
+import { getVendorFollowState } from "@/services/vendor-follow-api.service";
+import { getVendorSavedStates } from "@/services/vendor-saved-api.service";
+import { getVendorPostShareCounts } from "@/services/vendor-shares-api.service";
+import { isVendorVideoVisibleInFeed } from "@/lib/vendor-video-visibility";
 
 type OfferValue = { priceInr?: number; originalPriceInr?: number; badge?: string };
 
@@ -105,11 +107,11 @@ function mapDatabaseData(posts: Array<{
   };
 }
 
-async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
+async function getSharedDiscoveryData(userId?: string): Promise<DiscoveryData> {
   const [records, vendors, profile] = await Promise.all([
-    sharedPrisma.sharedPost.findMany({ orderBy: { createdAt: "desc" }, include: { vendor: { include: { user: true } }, offer: true } }),
-    sharedPrisma.sharedVendor.findMany({ include: { user: true } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { latitude: true, longitude: true } }),
+    prisma.sharedPost.findMany({ orderBy: { createdAt: "desc" }, include: { vendor: { include: { user: true } }, offer: true } }),
+    prisma.sharedVendor.findMany({ include: { user: true } }),
+    userId ? prisma.user.findUnique({ where: { id: userId }, select: { latitude: true, longitude: true } }) : Promise.resolve(null),
   ]);
 
   const postIds = records.map((record) => String(record.id));
@@ -120,11 +122,13 @@ async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
     feedInteraction?: typeof prisma.feedInteraction;
     feedShare?: typeof prisma.feedShare;
   };
-  const [menuItems, interactions, shares, externalLikes] = await Promise.all([
-    vendorIds.length > 0 ? sharedPrisma.sharedMenuItem.findMany({ where: { vendorId: { in: vendorIds } }, select: { id: true, productName: true } }) : Promise.resolve([]),
+  const [menuItems, interactions, shares, externalLikes, externalSaves, externalShareCounts] = await Promise.all([
+    vendorIds.length > 0 ? prisma.sharedMenuItem.findMany({ where: { vendorId: { in: vendorIds } }, select: { id: true, productName: true } }) : Promise.resolve([]),
     postIds.length > 0 && engagementClient.feedInteraction ? engagementClient.feedInteraction.findMany({ where: { targetType: "POST", targetId: { in: postIds }, active: true }, select: { targetId: true, userId: true, action: true } }).catch(() => []) : Promise.resolve([]),
     postIds.length > 0 && engagementClient.feedShare ? engagementClient.feedShare.groupBy({ by: ["targetId"], where: { targetType: "POST", targetId: { in: postIds } }, _count: { _all: true } }).catch(() => []) : Promise.resolve([]),
     getExternalLikesForPosts(userId, postIds),
+    getVendorSavedStates(postIds, userId),
+    getVendorPostShareCounts(vendorIds),
   ]);
   const engagementByPost = new Map<string, { likes: number; saves: number; directions: number; liked: boolean; saved: boolean }>();
   for (const interaction of interactions) {
@@ -137,7 +141,7 @@ async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
   const shareCounts = new Map(shares.map((item) => [item.targetId, item._count._all]));
   const productNames = new Map(menuItems.map((item) => [item.id, item.productName]));
 
-  const shops = vendors.map((vendor) => {
+  const shops: Shop[] = vendors.map((vendor) => {
     const location = normalizeVendorLocation(vendor.address);
     const name = vendor.businessName?.trim() || `Vendor ${vendor.id}`;
     const normalizedCategory = normalizeBusinessCategory(vendor.businessCategory);
@@ -149,8 +153,17 @@ async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
       latitude: location.latitude, longitude: location.longitude,
     } satisfies DiscoveryData["shops"][number];
   });
-  const now = Date.now();
-  const posts = records.filter((record) => !record.isOfferIncluded || Boolean(record.offer?.validityTo && record.offer.validityTo.getTime() >= now)).map((record) => {
+  const followStates = await Promise.all(shops.map((shop) => getVendorFollowState(Number(shop.id), userId).catch(() => null)));
+  shops.forEach((shop, index) => {
+    shop.followed = followStates[index]?.followed ?? false;
+    shop.followerCount = followStates[index]?.followerCount ?? 0;
+  });
+  const now = new Date();
+  const posts = records.filter((record) => {
+    if (record.isOfferIncluded && ((record.offer?.validityFrom && record.offer.validityFrom > now) || (record.offer?.validityTo && record.offer.validityTo < now))) return false;
+    if (record.postType.toLowerCase() === "video" && !isVendorVideoVisibleInFeed(record.createdAt, record.vendor.workingDays, now)) return false;
+    return true;
+  }).map((record) => {
     const offerValue = record.offer?.offerValue && typeof record.offer.offerValue === "object" ? record.offer.offerValue as { priceInr?: number; originalPriceInr?: number; badge?: string } : {};
     const mediaType = record.postType.toLowerCase() === "video" ? "video" as const : "image" as const;
     const targetType = record.offer?.offerTargetType?.toUpperCase();
@@ -161,27 +174,33 @@ async function getSharedDiscoveryData(userId: string): Promise<DiscoveryData> {
     return {
       id: String(record.id), shopId: String(record.vendorId), kind: record.isOfferIncluded ? "offer" as const : mediaType === "video" ? "reel" as const : "post" as const,
       title, description: `${record.vendor.businessName || "Local vendor"} shared a new ${record.postCategory || "post"}.`, image: record.postUrl, imageAlt: title,
-      likes: externalLike?.likeCount ?? engagement?.likes ?? 0, saves: engagement?.saves ?? 0, shares: shareCounts.get(String(record.id)) ?? 0, directionCount: engagement?.directions ?? 0,
+      likes: externalLike?.likeCount ?? engagement?.likes ?? 0, saves: externalSaves.get(String(record.id))?.savedCount ?? engagement?.saves ?? 0, shares: externalShareCounts.get(String(record.id)) ?? shareCounts.get(String(record.id)) ?? 0, directionCount: engagement?.directions ?? 0,
       publishedAt: (record.createdAt ?? new Date()).toISOString(), mediaType, mediaUrl: mediaType === "video" ? record.postUrl : undefined,
       hashtags: mergeHashtags(record.postCategory ? [record.postCategory.startsWith("#") ? record.postCategory : `#${record.postCategory.replace(/\s+/g, "")}`] : [], productName), price: offerValue.priceInr,
-      originalPrice: offerValue.originalPriceInr, badge: record.isOfferIncluded ? formatOfferLabel({ offerType: record.offer?.offerType, offerValue: record.offer?.offerValue, badge: offerValue.badge, productName, price: offerValue.priceInr, originalPrice: offerValue.originalPriceInr, category: record.postCategory }) : undefined, offerValidUntil: record.offer?.validityTo?.toISOString(), liked: externalLike?.liked ?? engagement?.liked ?? false, saved: engagement?.saved ?? false,
+      originalPrice: offerValue.originalPriceInr, badge: record.isOfferIncluded ? formatOfferLabel({ offerType: record.offer?.offerType, offerValue: record.offer?.offerValue, badge: offerValue.badge, productName, price: offerValue.priceInr, originalPrice: offerValue.originalPriceInr, category: record.postCategory }) : undefined, offerValidUntil: record.offer?.validityTo?.toISOString(), liked: externalLike?.liked ?? engagement?.liked ?? false, saved: externalSaves.get(String(record.id))?.saved ?? engagement?.saved ?? false,
     } satisfies DiscoveryData["posts"][number];
   });
   return { shops, posts, stories: [], purchases: [] };
 }
 
-export async function getDiscoveryData(userId: string): Promise<DiscoveryData> {
+export async function getDiscoveryData(userId?: string): Promise<DiscoveryData> {
   try {
-    return await getVendorPostsFromApi(userId);
-  } catch (error) {
-    console.error("Unable to load vendor posts from the API; using the database fallback.", error);
-    try {
-      return await getSharedDiscoveryData(userId);
-    } catch (sharedError) {
-      console.error("Unable to load shared discovery data.", sharedError);
-      return getLegacyDiscoveryData(userId);
-    }
+    return await getSharedDiscoveryData(userId);
+  } catch (sharedError) {
+    console.error("Unable to load shared discovery data.", sharedError);
+    // A second fallback query would worsen a database connection-limit outage.
+    if (isDatabaseConnectionLimitError(sharedError)) return emptyDiscoveryData();
+    return userId ? getLegacyDiscoveryData(userId) : emptyDiscoveryData();
   }
+}
+
+function emptyDiscoveryData(): DiscoveryData {
+  return { shops: [], posts: [], stories: [], purchases: [] };
+}
+
+function isDatabaseConnectionLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /too many database connections|too many connections|P2037|08004/i.test(message);
 }
 
 async function getLegacyDiscoveryData(userId: string): Promise<DiscoveryData> {
@@ -231,14 +250,7 @@ export async function getSavedData(userId: string): Promise<DiscoveryData> {
     const feedShare = (prisma as unknown as { feedShare?: typeof prisma.feedShare }).feedShare;
     const shares = posts.length > 0 && feedShare ? await feedShare.groupBy({ by: ["targetId"], where: { targetType: "POST", targetId: { in: posts.map((post) => post.id) } }, _count: { _all: true } }).catch(() => []) : [];
     const savedLocalData = mapDatabaseData(posts, user ?? undefined, new Map(shares.map((item) => [item.targetId, item._count._all])));
-    let savedVendorData: DiscoveryData | null = null;
-    try {
-      savedVendorData = await getVendorPostsFromApi(userId);
-    } catch {
-      // Keep locally saved posts available if the vendor feed API is unavailable.
-    }
-    if (!savedVendorData) return savedLocalData;
-
+    const savedVendorData = await getSharedDiscoveryData(userId);
     const localPostIds = new Set(savedLocalData.posts.map((post) => post.id));
     const savedVendorPosts = savedVendorData.posts.filter((post) => post.saved && !localPostIds.has(post.id));
     const localShopIds = new Set(savedLocalData.shops.map((shop) => shop.id));

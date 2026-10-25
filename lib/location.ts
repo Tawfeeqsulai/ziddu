@@ -58,3 +58,6 @@ export function normalizeProviderResult(result: { display_name?: unknown; lat?: 
         longitude: Number.isFinite(longitude) ? longitude : undefined,
     });
 }
+
+// A directions session counts as a shop walk-in once the customer is this close.
+export const WALKIN_ARRIVAL_RADIUS_METERS = 20;

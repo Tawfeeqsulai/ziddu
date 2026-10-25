@@ -63,15 +63,22 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(12_000),
     });
 
-    if (response.status === 403) {
-      return NextResponse.json({ message: "Google Routes API rejected this key. Check that Routes API is enabled and GOOGLE_ROUTES_API_KEY belongs to a billing-enabled project." }, { status: 503 });
-    }
-    if (!response.ok) return NextResponse.json({ message: "Google could not calculate a route right now. Please try again." }, { status: 503 });
-
-    const payload = await response.json() as {
+    const payload = await response.json().catch(() => null) as {
+      error?: { message?: string; status?: string };
       routes?: Array<{ distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } }>;
-    };
-    const route = payload.routes?.[0];
+    } | null;
+
+    if (!response.ok) {
+      const googleMessage = payload?.error?.message?.trim();
+      const message = googleMessage
+        ? `Google Routes API rejected the request: ${googleMessage}`
+        : response.status === 403
+          ? "Google Routes API denied the request. Enable Routes API, check billing, and ensure the server key allows Routes API requests."
+          : "Google could not calculate a route right now. Please try again.";
+      return NextResponse.json({ message }, { status: 503 });
+    }
+
+    const route = payload?.routes?.[0];
     const encodedPolyline = route?.polyline?.encodedPolyline;
     if (!route || !encodedPolyline) return NextResponse.json({ message: "No driving route was found." }, { status: 404 });
 

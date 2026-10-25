@@ -1,4 +1,4 @@
-import { AffiliateReferralType } from "@prisma/client";
+import { AffiliateReferralType } from "@/lib/db/generated/main";
 import { NextResponse } from "next/server";
 import { AFFILIATE_ATTRIBUTION_WINDOW_SECONDS } from "@/lib/affiliate/config";
 import { createReferralCookieValue, AFFILIATE_REFERRAL_COOKIE } from "@/lib/affiliate/referral-cookie";

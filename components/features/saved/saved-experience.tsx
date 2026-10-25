@@ -31,7 +31,6 @@ export default function SavedExperience({ initial }: SavedExperienceProps) {
         try {
             const response = await fetch("/api/feed/interactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, active: !wasActive }) });
             if (!response.ok) throw new Error("Interaction unavailable");
-            window.dispatchEvent(new Event("ziddu:feed-mutation"));
         } catch {
             if (action === "like") setLiked((items) => wasActive ? [...items, id] : items.filter((item) => item !== id));
             else if (action === "follow") setFollowed((items) => wasActive ? [...items, id] : items.filter((item) => item !== id));

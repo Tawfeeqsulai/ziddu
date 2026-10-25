@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { sharedPrisma } from "@/lib/db/shared-prisma";
+import { prisma } from "@/lib/db/prisma";
 import { normalizeVendorLocation } from "@/lib/vendor-location";
 
 export type SharedPostView = {
@@ -53,7 +53,7 @@ function publicMediaUrl(url: string | null | undefined): string | null {
  * post. Wrapped in cache() so the page and its metadata share one query.
  */
 export const getSharedPost = cache(async (id: number): Promise<SharedPostView | null> => {
-  const post = await sharedPrisma.sharedPost.findUnique({
+  const post = await prisma.sharedPost.findUnique({
     where: { id },
     include: {
       vendor: { select: { id: true, businessName: true, logoUrl: true, address: true, status: true } },
@@ -69,7 +69,7 @@ export const getSharedPost = cache(async (id: number): Promise<SharedPostView | 
   if (post.isOfferIncluded && post.offer) {
     const targetIsItem = !post.offer.offerTargetType || /^item$/i.test(post.offer.offerTargetType);
     const product = targetIsItem && post.offer.offerTargetId
-      ? await sharedPrisma.sharedMenuItem.findUnique({ where: { id: post.offer.offerTargetId }, select: { productName: true } }).catch(() => null)
+      ? await prisma.sharedMenuItem.findUnique({ where: { id: post.offer.offerTargetId }, select: { productName: true } }).catch(() => null)
       : null;
     offer = {
       label: offerLabel(post.offer.offerType, post.offer.offerValue),

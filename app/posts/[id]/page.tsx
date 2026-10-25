@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MapPin, Store, Tag } from "lucide-react";
+import SharedPostExperience from "@/components/features/discover/shared-post-experience";
 import { BackButton } from "@/components/ui/back-button";
+import { getCurrentUser } from "@/lib/auth/session";
 import { decodePostShareId } from "@/lib/post-share-id";
+import { getDiscoveryData } from "@/services/discovery.service";
 import { getSharedPost } from "@/services/shared-post.service";
+import { getShopProfile } from "@/services/shop-profile.service";
+import type { FeedPost, Shop } from "@/types/commerce";
 
 /**
  * A vendor post shared from the ZIDDU vendor app:
@@ -16,6 +21,30 @@ import { getSharedPost } from "@/services/shared-post.service";
 async function loadPost(segment: string) {
   const id = decodePostShareId(segment);
   return id ? getSharedPost(id) : null;
+}
+
+/**
+ * The post as the feed shows it (with the viewer's like / save / follow state),
+ * so the share page can render the same card and actions. Falls back to the
+ * vendor's profile posts when the feed does not include it.
+ */
+async function loadFeedPost(postId: string, shopId: string, userId?: string): Promise<{ post: FeedPost; shop: Shop } | null> {
+  try {
+    const feed = await getDiscoveryData(userId);
+    const post = feed.posts.find((item) => item.id === postId);
+    const shop = post && feed.shops.find((item) => item.id === post.shopId);
+    if (post && shop) return { post, shop };
+  } catch {
+    // Try the vendor profile below.
+  }
+  try {
+    const profile = await getShopProfile(shopId, userId);
+    const post = profile?.posts.find((item) => item.id === postId);
+    if (profile && post) return { post, shop: profile.shop };
+  } catch {
+    // Keep the simple share view below.
+  }
+  return null;
 }
 
 export async function generateMetadata({ params }: PageProps<"/posts/[id]">): Promise<Metadata> {
@@ -50,6 +79,10 @@ export default async function SharedPostPage({ params }: PageProps<"/posts/[id]"
   const { id } = await params;
   const post = await loadPost(id);
   if (!post) notFound();
+
+  const user = await getCurrentUser();
+  const feedPost = await loadFeedPost(String(post.id), post.shop.id, user?.id);
+  if (feedPost) return <SharedPostExperience post={feedPost.post} shop={feedPost.shop} />;
 
   const posted = post.createdAt?.toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" });
   const validTill = post.offer?.validTill?.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });

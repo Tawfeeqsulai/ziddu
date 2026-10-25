@@ -1,12 +1,13 @@
 import "server-only";
-import { PrismaClient } from "@/lib/db/generated/shared";
 
-const globalForSharedPrisma = globalThis as typeof globalThis & {
-  zidduSharedPrisma?: PrismaClient;
+// Shared vendor tables use the main client so the app opens one Prisma pool.
+const legacyClient = globalThis as typeof globalThis & {
+  zidduSharedPrisma?: { $disconnect: () => Promise<void> };
 };
-
-export const sharedPrisma = globalForSharedPrisma.zidduSharedPrisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForSharedPrisma.zidduSharedPrisma = sharedPrisma;
+if (legacyClient.zidduSharedPrisma) {
+  const oldClient = legacyClient.zidduSharedPrisma;
+  legacyClient.zidduSharedPrisma = undefined;
+  void oldClient.$disconnect().catch(() => undefined);
 }
+
+export { prisma as sharedPrisma } from "@/lib/db/prisma";

@@ -8,11 +8,11 @@ import { getPurchaseHistory } from "@/services/purchase-history.service";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const { id } = await params;
-  const profile = await getShopProfile(id);
-  if (!profile) return { title: "Shop not found — ZIDDU" };
-  return { title: `${profile.shop.name} — ZIDDU`, description: `${profile.shop.description} ${profile.shop.area}, ${profile.shop.city}.` };
+export function generateMetadata(): Metadata {
+  return {
+    title: "Shop profile | ZIDDU",
+    description: "Discover local shops, offers, and products on ZIDDU.",
+  };
 }
 
 export default async function ShopPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ order?: string }> }) {

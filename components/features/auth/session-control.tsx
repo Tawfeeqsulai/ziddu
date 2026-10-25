@@ -5,9 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { Gift, LogOut, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { useLoginPrompt } from "@/components/features/auth/login-prompt-provider";
 
 export default function SessionControl({ iconButton = false }: { iconButton?: boolean }) {
   const router = useRouter();
+  const { requireLogin } = useLoginPrompt();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { data, isPending } = authClient.useSession();
@@ -26,7 +28,7 @@ export default function SessionControl({ iconButton = false }: { iconButton?: bo
   }
 
   if (!data?.user) {
-    return <Link aria-label="Sign in" className={iconButton ? "home-mobile-icon" : "avatar-button"} href="/login">{iconButton ? <UserRound size={17} /> : "RK"}</Link>;
+    return <button aria-label="Sign in" className={iconButton ? "home-mobile-icon" : "avatar-button"} onClick={() => { requireLogin(); }} type="button">{iconButton ? <UserRound size={17} /> : "RK"}</button>;
   }
 
   const initials = data.user.name
@@ -38,7 +40,7 @@ export default function SessionControl({ iconButton = false }: { iconButton?: bo
   async function signOut() {
     await authClient.signOut();
     setOpen(false);
-    router.replace("/login");
+    router.replace("/");
     router.refresh();
   }
 
